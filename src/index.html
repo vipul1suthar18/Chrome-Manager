@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SEO Workspace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        /* Theme tokens */
+        :root {
+            color-scheme: light;
+            --bg-app: #f3f6fb;
+            --bg-header: rgba(255, 255, 255, 0.94);
+            --surface: #ffffff;
+            --surface-muted: #f4f7fc;
+            --surface-raised: #edf3fb;
+            --text-primary: #14213b;
+            --text-secondary: #62718d;
+            --border-color: #dce5f1;
+            --input-bg: #ffffff;
+            --shadow-color: rgba(36, 69, 119, 0.08);
+            --accent: #2563eb;
+            --accent-soft: #e7efff;
+            --danger: #d84a59;
+        }
+
+        .theme-dark {
+            color-scheme: dark;
+            --bg-app: #101827;
+            --bg-header: rgba(17, 27, 44, 0.96);
+            --surface: #17243a;
+            --surface-muted: #1d2d47;
+            --surface-raised: #263852;
+            --text-primary: #f1f5fb;
+            --text-secondary: #a1b0c6;
+            --border-color: #30415a;
+            --input-bg: #111d30;
+            --shadow-color: rgba(0, 0, 0, 0.24);
+            --accent: #6d9bff;
+            --accent-soft: #263b61;
+            --danger: #ff7d88;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-app);
+            color: var(--text-primary);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        button, input, select { font: inherit; }
+        button { -webkit-tap-highlight-color: transparent; }
+
+        .app-header {
+            background: var(--bg-header);
+            border-color: var(--border-color);
+            backdrop-filter: blur(16px);
+        }
+
+        .app-shell { max-width: 1440px; }
+        .header-search > div { max-width: 370px; }
+
+        .surface-card {
+            background: var(--surface);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 24px var(--shadow-color);
+        }
+
+        .bg-glass {
+            background-color: var(--surface);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 5px 18px var(--shadow-color);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .hover-glow:hover {
+            border-color: var(--accent);
+            box-shadow: 0 10px 28px var(--shadow-color), 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
+            transform: translateY(-2px);
+        }
+
+        .theme-text { color: var(--text-primary); }
+        .muted-text { color: var(--text-secondary); }
+        .client-card { min-height: 116px; border-radius: 16px !important; cursor: pointer; }
+        .client-card-content { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+        .client-card-details { grid-column: 1; min-width: 0; }
+        .client-card-actions { grid-column: 2; grid-row: 1; }
+        .client-card-actions { opacity: 0; transition: opacity 0.18s ease; }
+        .client-card:hover .client-card-actions, .client-card:focus-within .client-card-actions { opacity: 1; }
+        .client-grid-list { grid-template-columns: 1fr !important; }
+        .client-grid-list .client-card { min-height: 0; }
+        .client-grid-list .client-card-content { display: flex; align-items: center; gap: 16px; }
+        .client-grid-list .client-card-details { flex: 1; min-width: 0; }
+        .client-grid-list .client-card-actions { margin-left: auto; }
+
+        .project-card { border-radius: 16px !important; padding: 16px !important; }
+        .resource-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .resource-tile {
+            min-height: 70px;
+            border-radius: 12px !important;
+            border: 1px solid var(--tile-border);
+            background: var(--tile-bg);
+            color: var(--tile-color);
+            transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+        }
+        .resource-tile:hover { transform: translateY(-2px); box-shadow: 0 5px 12px var(--shadow-color); }
+        .resource-1 { --tile-bg: #fff3f2; --tile-border: #ffe0dc; --tile-color: #e84d43; }
+        .resource-2 { --tile-bg: #fff7e9; --tile-border: #ffe7c2; --tile-color: #e88b17; }
+        .resource-3 { --tile-bg: #effaf5; --tile-border: #d4f1e2; --tile-color: #17966a; }
+        .resource-4 { --tile-bg: #f0f4ff; --tile-border: #dce5ff; --tile-color: #456de5; }
+        .theme-dark .resource-1 { --tile-bg: #402b33; --tile-border: #60404a; --tile-color: #ff938a; }
+        .theme-dark .resource-2 { --tile-bg: #3b3326; --tile-border: #5b4b31; --tile-color: #ffc46b; }
+        .theme-dark .resource-3 { --tile-bg: #203a34; --tile-border: #31594d; --tile-color: #67d3a3; }
+        .theme-dark .resource-4 { --tile-bg: #273451; --tile-border: #3b4c77; --tile-color: #91a9ff; }
+
+        .theme-dark #clients-view h2, .theme-dark .client-card .theme-text,
+        .theme-dark .project-card .theme-text, .theme-dark .modal-panel .theme-text,
+        .theme-dark .settings-content .theme-text { color: var(--text-primary) !important; }
+        .theme-dark .modal-panel h3, .theme-dark .modal-panel label,
+        .theme-dark .settings-content h4, .theme-dark .settings-content span { color: var(--text-primary); }
+        .theme-dark .modal-panel { background: var(--surface); border-color: var(--border-color); }
+        .modal-panel { color: var(--text-primary); }
+        .form-control { color: var(--text-primary); background: var(--input-bg); border-color: var(--border-color); }
+        .form-control::placeholder { color: var(--text-secondary); opacity: 0.72; }
+        .subtle-surface { color: var(--text-secondary); background: var(--surface-muted); border-color: var(--border-color); }
+        .profile-row { color: var(--text-primary); background: var(--surface-muted); border-color: var(--border-color); }
+        .resource-fields-grid { max-height: 48vh; }
+        .resource-form-row { min-width: 0; }
+        .resource-favicon { width: 24px; height: 24px; object-fit: contain; }
+        .resource-icon-fallback { color: var(--tile-color, var(--text-secondary)); }
+
+        .theme-switch {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            padding: 3px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--surface-muted);
+        }
+        .theme-option {
+            height: 34px;
+            min-width: 62px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 0 9px;
+            border-radius: 7px;
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 600;
+            transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+        }
+        .theme-option[aria-pressed="true"] {
+            background: var(--surface);
+            color: var(--accent);
+            box-shadow: 0 1px 4px var(--shadow-color);
+        }
+        .icon-button {
+            width: 40px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            background: var(--surface);
+        }
+        .icon-button:hover { color: var(--accent); border-color: var(--accent); }
+        .icon-button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+        .shortcut-hint {
+            flex: none;
+            white-space: nowrap;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 3px 6px;
+            color: var(--text-secondary);
+            background: var(--surface-muted);
+            font-size: 10px;
+            line-height: 1.2;
+        }
+
+        .empty-state { grid-column: 1 / -1; min-height: 260px; }
+
+        @media (max-width: 720px) {
+            .header-search { display: none; }
+            .app-header-inner { gap: 10px; padding-left: 16px; padding-right: 16px; }
+            .theme-option { min-width: 34px; }
+            .main-content { padding-left: 16px; padding-right: 16px; }
+            .client-card-actions { opacity: 1; }
+            .resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+
+        .modal {
+            background-color: rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(8px);
+            display: none;
+        }
+        .modal.active {
+            display: flex;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* Slide-in Animations for Transitions */
+        .fade-in-slide-left {
+            animation: slideLeft 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .fade-in-slide-right {
+            animation: slideRight 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        @keyframes slideLeft {
+            from { opacity: 0; transform: translateX(-15px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes slideRight {
+            from { opacity: 0; transform: translateX(15px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen text-[var(--text-primary)] transition-colors duration-300">
+
+    <header class="app-header border-b sticky top-0 z-10 transition-colors duration-300">
+        <div class="app-shell app-header-inner mx-auto px-6 py-3 flex justify-between items-center gap-6">
+            <div class="flex items-center space-x-3 cursor-pointer" id="logo-home">
+                <div class="bg-blue-600 text-white p-2.5 rounded-xl shadow-lg shadow-blue-900/20"><i class="fas fa-rocket text-lg"></i></div>
+                <h1 class="text-xl font-bold tracking-tight whitespace-nowrap">SEO Workspace</h1>
+            </div>
+
+            <div class="header-search flex-1 flex justify-center">
+                <div class="flex items-center rounded-xl px-4 py-2.5 text-sm max-w-md w-full border border-[var(--border-color)]" style="background-color: var(--input-bg);">
+                    <i class="fas fa-search mr-3 text-[var(--text-secondary)]"></i>
+                    <input type="text" placeholder="Search clients..." class="bg-transparent outline-none w-full text-[var(--text-primary)]" id="search-input">
+                    <kbd class="shortcut-hint ml-2">Ctrl K</kbd>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <div class="theme-switch" role="group" aria-label="Color theme">
+                    <button id="theme-light-btn" class="theme-option" type="button" aria-label="Light mode" aria-pressed="true" title="Light mode"><i class="fas fa-sun"></i><span>Light</span></button>
+                    <button id="theme-dark-btn" class="theme-option" type="button" aria-label="Dark mode" aria-pressed="false" title="Dark mode"><i class="fas fa-moon"></i><span>Dark</span></button>
+                </div>
+                <button id="add-client-btn" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl font-bold transition-all flex items-center shadow-lg shadow-blue-900/20 whitespace-nowrap">
+                    <i class="fas fa-plus mr-2 text-sm"></i> Add Client
+                </button>
+                <button id="add-project-btn" class="hidden bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl font-bold transition-all flex items-center shadow-lg shadow-blue-900/20 whitespace-nowrap" type="button">
+                    <i class="fas fa-plus mr-2 text-sm"></i> Add Project
+                </button>
+                <button id="settings-btn" class="icon-button" type="button" title="Settings" aria-label="Settings"><i class="fas fa-cog"></i></button>
+            </div>
+        </div>
+    </header>
+
+    <main class="app-shell main-content mx-auto px-6 py-7">
+        <div id="clients-view">
+            <div class="flex items-end justify-between gap-4 mb-6">
+                <div>
+                    <h2 class="text-3xl font-bold theme-text">Clients</h2>
+                    <p class="muted-text mt-1 text-sm">Select a client to view their projects</p>
+                </div>
+                <div class="flex items-center gap-1 p-1 rounded-xl border border-[var(--border-color)]" style="background: var(--surface);">
+                    <button id="grid-view-btn" class="icon-button !w-9 !h-9 !border-0" type="button" title="Grid view" aria-label="Grid view" aria-pressed="true"><i class="fas fa-th-large"></i></button>
+                    <button id="list-view-btn" class="icon-button !w-9 !h-9 !border-0" type="button" title="List view" aria-label="List view" aria-pressed="false"><i class="fas fa-bars"></i></button>
+                </div>
+            </div>
+            <div id="client-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+        </div>
+
+        <div id="workspace-view" class="hidden">
+            <button id="back-to-clients" class="muted-text hover:text-blue-600 font-medium flex items-center mb-5 transition-colors"><i class="fas fa-arrow-left mr-2"></i> Back to Clients</button>
+            <div class="flex justify-between items-end gap-5 mb-6 flex-wrap">
+                <div>
+                    <div>
+                        <h2 id="current-client-name" class="text-2xl font-bold theme-text leading-tight">Client Name</h2>
+                        <p id="current-client-info" class="muted-text mt-1 text-sm">0 projects · Default</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center rounded-xl px-4 py-2.5 text-sm w-64 border border-[var(--border-color)]" style="background: var(--input-bg); color: var(--text-secondary);">
+                        <i class="fas fa-search mr-3"></i>
+                        <input type="text" placeholder="Search projects..." class="bg-transparent outline-none w-full" style="color: var(--text-primary);" id="project-search-input">
+                    </div>
+                </div>
+            </div>
+            <div id="project-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+        </div>
+    </main>
+
+    <!-- Client Modal (Add/Edit) -->
+    <div id="client-modal" class="modal fixed inset-0 z-50 items-center justify-center p-4">
+        <div class="modal-panel rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border">
+            <div class="px-6 py-4 border-b border-[var(--border-color)] flex justify-between items-center">
+                <h3 id="client-modal-title" class="theme-text text-lg font-bold">Add New Client</h3>
+                <button type="button" class="close-modal icon-button !border-0 !bg-transparent" title="Close" aria-label="Close"><i class="fas fa-times"></i></button>
+            </div>
+            <form id="client-form" class="p-6">
+                <input type="hidden" id="client-id-input">
+                <div class="mb-4">
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Client Name</label>
+                    <input type="text" id="client-name-input" required class="form-control w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Acme Corp">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Email / Account</label>
+                    <input type="email" id="client-email-input" class="form-control w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="client@example.com">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Chrome Profile</label>
+                    <select id="client-profile-input" class="form-control w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
+                        <!-- Profiles injected here -->
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-3 mt-8">
+                    <button type="button" class="close-modal muted-text px-4 py-2 font-medium hover:text-blue-600 transition-colors">Cancel</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-900/20">Save Client</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Project Modal (Add/Edit) -->
+    <div id="project-modal" class="modal fixed inset-0 z-50 items-center justify-center p-4">
+        <div class="modal-panel rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border flex flex-col">
+            <div class="px-6 py-4 border-b border-[var(--border-color)] flex justify-between items-center">
+                <h3 id="project-modal-title" class="theme-text text-lg font-bold">Add Project</h3>
+                <button type="button" class="close-modal icon-button !border-0 !bg-transparent" title="Close" aria-label="Close"><i class="fas fa-times"></i></button>
+            </div>
+            <form id="project-form" class="p-6 overflow-y-auto">
+                <input type="hidden" id="project-id-input">
+                <div class="mb-6">
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Project Name</label>
+                    <input type="text" id="project-name-input" required class="form-control w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Main Website">
+                </div>
+
+                <div class="flex items-center justify-between gap-3 mb-3">
+                    <label class="block text-xs font-bold text-slate-400 uppercase">Resources</label>
+                    <button id="add-resource-btn" type="button" class="muted-text hover:text-blue-600 px-3 py-2 rounded-lg text-sm font-semibold transition-colors">
+                        <i class="fas fa-plus mr-1"></i> Add Resource
+                    </button>
+                </div>
+                <div id="project-resources-list" class="resource-fields-grid grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto pr-1"></div>
+
+                <div class="flex justify-end space-x-3 mt-8">
+                    <button type="button" class="close-modal muted-text px-4 py-2 font-medium hover:bg-[var(--surface-muted)] rounded-lg transition-colors">Cancel</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2 rounded-lg font-bold shadow-lg shadow-blue-200 transition-all">Save Project</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal fixed inset-0 z-50 items-center justify-center p-4">
+        <div class="modal-panel rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border flex flex-col h-[500px]">
+            <div class="px-6 py-4 border-b border-[var(--border-color)] flex justify-between items-center">
+                <h3 class="theme-text text-lg font-bold">Settings</h3>
+                <button type="button" class="close-modal icon-button !border-0 !bg-transparent" title="Close" aria-label="Close"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="flex flex-1 overflow-hidden">
+                <!-- Sidebar -->
+                <div class="w-48 border-r border-[var(--border-color)] p-4 space-y-2" style="background: var(--surface-muted);">
+                    <button class="tab-btn w-full text-left px-4 py-2.5 rounded-xl font-medium text-sm text-blue-600 bg-blue-500/10" data-tab="profiles">
+                        <i class="fas fa-user-circle mr-2"></i> Chrome Profiles
+                    </button>
+                    <button class="tab-btn w-full text-left px-4 py-2.5 rounded-xl font-medium text-sm muted-text hover:bg-[var(--surface-raised)]" data-tab="appearance">
+                        <i class="fas fa-palette mr-2"></i> Appearance
+                    </button>
+                </div>
+                <!-- Content Area -->
+                <div class="settings-content flex-1 p-6 overflow-y-auto">
+                    <!-- Profiles Tab -->
+                    <div id="tab-profiles" class="tab-content space-y-4">
+                        <div class="flex justify-between items-center mb-4">
+                            <h4 class="font-bold theme-text">Chrome Profiles</h4>
+                            <button id="refresh-profiles-btn" class="text-blue-400 hover:text-blue-300 text-sm font-bold"><i class="fas fa-sync-alt mr-1"></i> Refresh</button>
+                        </div>
+                        <div id="profiles-list" class="space-y-2"></div>
+                    </div>
+                    <!-- Appearance Tab -->
+                    <div id="tab-appearance" class="tab-content hidden space-y-4">
+                        <h4 class="font-bold theme-text mb-4">Theme Selection</h4>
+                        <div class="space-y-3">
+                            <label class="subtle-surface flex items-center justify-between p-4 border rounded-xl cursor-pointer hover:border-blue-400 transition-all">
+                                <span class="font-medium">Dark Mode</span>
+                                <input type="radio" name="theme-choice" value="dark" class="form-radio text-blue-600">
+                            </label>
+                            <label class="subtle-surface flex items-center justify-between p-4 border rounded-xl cursor-pointer hover:border-blue-400 transition-all">
+                                <span class="font-medium">Light Mode</span>
+                                <input type="radio" name="theme-choice" value="light" class="form-radio text-blue-600">
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirm Modal -->
+    <div id="delete-modal" class="modal fixed inset-0 z-50 items-center justify-center p-4">
+        <div class="modal-panel rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center border">
+            <div class="bg-red-100 text-red-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-exclamation-triangle text-2xl"></i>
+            </div>
+            <h3 class="theme-text text-xl font-bold mb-2">Confirm Delete</h3>
+            <p class="muted-text mb-6">Are you sure you want to delete this?</p>
+            <div class="flex justify-center space-x-3">
+                <button type="button" class="close-modal muted-text px-4 py-2 font-medium hover:bg-[var(--surface-muted)] rounded-lg">Cancel</button>
+                <button id="confirm-delete-btn" class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-bold">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>
