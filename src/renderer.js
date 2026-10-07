@@ -4,18 +4,21 @@ let chromeProfiles = [];
 let currentClientId = null;
 let deleteTarget = null; // { type: 'client'|'project', id: string }
 let clientViewMode = 'grid';
+let isRunningSearchConsoleAll = false;
 
 // UI Elements
 const clientGrid = document.getElementById('client-grid');
 const projectGrid = document.getElementById('project-grid');
 const workspaceView = document.getElementById('workspace-view');
 const clientsView = document.getElementById('clients-view');
+const sectionView = document.getElementById('section-view');
 
 // Modals
 const clientModal = document.getElementById('client-modal');
 const projectModal = document.getElementById('project-modal');
 const settingsModal = document.getElementById('settings-modal');
 const deleteModal = document.getElementById('delete-modal');
+const searchConsoleConnectionModal = document.getElementById('search-console-connection-modal');
 
 // Forms
 const clientForm = document.getElementById('client-form');
@@ -323,6 +326,21 @@ function openProjectModal(id = null) {
     projectModal.classList.add('active');
 }
 
+function openSearchConsoleConnectionModal(clientId, projectId) {
+    const client = appData.clients.find(item => item.id === clientId);
+    const project = client?.projects.find(item => item.id === projectId);
+    if (!client || !project) return;
+
+    const workflow = window.reportingWorkflows.searchConsole;
+    const settings = workflow.getSettings(project);
+    document.getElementById('search-console-connection-client-id').value = client.id;
+    document.getElementById('search-console-connection-project-id').value = project.id;
+    document.getElementById('search-console-connection-project').textContent = `${client.name} · ${project.name}`;
+    document.getElementById('search-console-spreadsheet-id').value = workflow.getSpreadsheetId(project);
+    document.getElementById('search-console-script-url').value = settings.scriptUrl;
+    searchConsoleConnectionModal.classList.add('active');
+}
+
 function showDeleteConfirm(type, id) {
     deleteTarget = {
         type,
@@ -337,6 +355,7 @@ function closeAllModals() {
     projectModal.classList.remove('active');
     settingsModal.classList.remove('active');
     deleteModal.classList.remove('active');
+    searchConsoleConnectionModal.classList.remove('active');
     deleteTarget = null;
 }
 
@@ -344,6 +363,29 @@ function closeAllModals() {
 function setupEventListeners() {
     document.getElementById('logo-home').addEventListener('click', showClientsView);
     document.getElementById('back-to-clients').addEventListener('click', showClientsView);
+    document.getElementById('section-back-to-clients').addEventListener('click', showClientsView);
+    document.getElementById('search-console-btn').addEventListener('click', () => showSectionView('searchConsole'));
+    sectionView.addEventListener('change', (event) => {
+        if (event.target.matches('[data-reporting-field]')) saveReportingSetting(event.target);
+    });
+    sectionView.addEventListener('input', (event) => {
+        if (event.target.matches('[data-reporting-field]')) event.target.setCustomValidity('');
+    });
+    sectionView.addEventListener('click', (event) => {
+        const sheetButton = event.target.closest('.reporting-open-sheet');
+        if (sheetButton) {
+            openReportingSpreadsheet(sheetButton);
+            return;
+        }
+        const editConnectionButton = event.target.closest('.reporting-edit-connection');
+        if (editConnectionButton) {
+            openSearchConsoleConnectionModal(editConnectionButton.dataset.clientId, editConnectionButton.dataset.projectId);
+            return;
+        }
+        const runButton = event.target.closest('.reporting-run');
+        if (runButton) runReportingWorkflow(runButton);
+    });
+    document.getElementById('search-console-run-all').addEventListener('click', runAllSearchConsole);
     document.getElementById('add-client-btn').addEventListener('click', () => openClientModal());
     document.getElementById('add-project-btn').addEventListener('click', () => openProjectModal());
     document.getElementById('add-resource-btn').addEventListener('click', () => {
@@ -437,6 +479,8 @@ function setupEventListeners() {
         btn.addEventListener('click', closeAllModals);
     });
 
+    document.getElementById('search-console-connection-form').addEventListener('submit', saveSearchConsoleConnection);
+
     // Forms Submission
     clientForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -485,7 +529,9 @@ function setupEventListeners() {
 
         const resources = readProjectResources();
 
+        const existingProject = id ? client.projects.find(project => project.id === id) : null;
         const projectData = {
+            ...(existingProject || {}),
             id: id || Date.now().toString(),
             name,
             resources
@@ -552,6 +598,7 @@ function showClientsView() {
     document.getElementById('add-client-btn').classList.remove('hidden');
     document.getElementById('add-project-btn').classList.add('hidden');
     workspaceView.classList.add('hidden');
+    sectionView.classList.add('hidden');
     clientsView.classList.remove('hidden');
     clientsView.classList.add('animate-in', 'fade-in', 'slide-in-from-left-4', 'duration-200');
 
@@ -561,11 +608,280 @@ function showClientsView() {
     renderClients();
 }
 
+function getReportingProjects() {
+    return appData.clients.flatMap(client => (client.projects || []).map(project => ({ client, project })));
+}
+
+function reportingInput(field, value, label, type = 'text') {
+    const isDate = type === 'date';
+    const displayValue = isDate ? formatReportingDateForInput(value) : value;
+    return `<input class="reporting-control" type="${isDate ? 'text' : type}"${isDate ? ' inputmode="text" autocomplete="off"' : ''} data-reporting-field="${field}" value="${escapeHtml(displayValue)}" aria-label="${escapeHtml(label)}" placeholder="${isDate ? 'DD-MM-YYYY' : 'Set value'}">`;
+}
+
+function parseReportingDate(value) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+
+    let year, month, day;
+    let match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (match) {
+        [, year, month, day] = match;
+    } else {
+        // For pasted dates, prefer the user's day-first DD-MM-YYYY format.
+        match = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+        if (!match) return null;
+        [, day, month, year] = match;
+    }
+
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    if (date.getFullYear() !== Number(year) || date.getMonth() !== Number(month) - 1 || date.getDate() !== Number(day)) return null;
+    return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function formatReportingDateForInput(value) {
+    const normalized = parseReportingDate(value);
+    if (!normalized) return value || '';
+    const [year, month, day] = normalized.split('-');
+    return `${day}-${month}-${year}`;
+}
+
+function reportingStatus(type) {
+    return document.getElementById('search-console-status');
+}
+
+function renderReportingSection(type) {
+    document.getElementById('section-title').textContent = 'Search Console';
+    document.getElementById('section-description').textContent = 'Configure Search Console reports for each client and project. Use Edit to set the sheet and Apps Script.';
+    document.getElementById('search-console-panel').classList.remove('hidden');
+
+    const rows = getReportingProjects();
+    const tbody = document.getElementById('search-console-rows');
+    const emptyState = document.getElementById('search-console-empty');
+    tbody.innerHTML = rows.map(({ client, project }) => {
+        const settings = window.reportingWorkflows.searchConsole.getSettings(project);
+        const spreadsheetId = window.reportingWorkflows.searchConsole.getSpreadsheetId(project);
+        const connectionEditor = `<button type="button" class="reporting-edit-connection mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[var(--border-color)] muted-text text-xs font-semibold hover:text-blue-600 hover:border-blue-500 transition-colors" data-client-id="${escapeHtml(client.id)}" data-project-id="${escapeHtml(project.id)}"><i class="fas fa-sliders-h" aria-hidden="true"></i><span>Edit</span></button>`;
+        const projectCell = `<button type="button" class="reporting-open-sheet block max-w-44 text-left font-semibold theme-text truncate hover:text-blue-600 hover:underline underline-offset-2 transition-colors" data-client-id="${escapeHtml(client.id)}" data-project-id="${escapeHtml(project.id)}" aria-label="Open ${escapeHtml(project.name)} spreadsheet in its Chrome profile" title="Open connected spreadsheet">${escapeHtml(project.name)}</button>${connectionEditor}`;
+        const inputs = [
+            reportingInput('propertyUrl', window.reportingWorkflows.searchConsole.getPropertyUrl(project), `${project.name} Property URL`),
+            reportingInput('startDate', settings.startDate, `${project.name} Start Date`, 'date'),
+            reportingInput('endDate', settings.endDate, `${project.name} End Date`, 'date'),
+            reportingInput('dimension', settings.dimension, `${project.name} Dimension`),
+            reportingInput('searchType', settings.searchType, `${project.name} Search Type`),
+            reportingInput('country', settings.country, `${project.name} Country`),
+            reportingInput('outputMode', settings.outputMode, `${project.name} Output Mode`),
+            reportingInput('sheetName', settings.sheetName, `${project.name} Sheet Name`)
+        ];
+        return `<tr data-client-id="${escapeHtml(client.id)}" data-project-id="${escapeHtml(project.id)}"><td>${projectCell}</td>${inputs.map(input => `<td>${input}</td>`).join('')}<td><button type="button" class="reporting-run bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg font-semibold text-xs transition-colors whitespace-nowrap" data-workflow="searchConsole">Run</button></td></tr>`;
+    }).join('');
+    emptyState.classList.toggle('hidden', rows.length > 0);
+    tbody.closest('table').classList.toggle('hidden', rows.length === 0);
+}
+
+async function openReportingSpreadsheet(button) {
+    const client = appData.clients.find(item => item.id === button.dataset.clientId);
+    const project = client?.projects.find(item => item.id === button.dataset.projectId);
+    if (!client || !project) return;
+
+    const spreadsheetId = window.reportingWorkflows.searchConsole.getSpreadsheetId(project);
+    const status = reportingStatus('searchConsole');
+    if (!spreadsheetId) {
+        status.textContent = `No spreadsheet is connected for ${project.name}. Use Edit to add its Spreadsheet ID.`;
+        return;
+    }
+
+    button.disabled = true;
+    button.classList.add('opacity-60', 'cursor-wait');
+    status.textContent = `Opening ${project.name} spreadsheet in its Chrome profile…`;
+    try {
+        const result = await window.electronAPI.launchUrlWithProfile({
+            url: `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/edit`,
+            profileDir: client.chromeProfile?.directory || 'Default'
+        });
+        if (!result?.success) throw new Error(result?.error || 'Unable to open the spreadsheet.');
+        status.textContent = `Opened ${project.name} spreadsheet in its Chrome profile.`;
+    } catch (error) {
+        status.textContent = `Could not open ${project.name}: ${error.message}`;
+    } finally {
+        button.disabled = false;
+        button.classList.remove('opacity-60', 'cursor-wait');
+    }
+}
+
+async function saveReportingSetting(input) {
+    const row = input.closest('tr');
+    const type = input.closest('table').dataset.reportingType;
+    const client = appData.clients.find(item => item.id === row.dataset.clientId);
+    const project = client?.projects.find(item => item.id === row.dataset.projectId);
+    if (!project) return;
+
+    let value = input.value.trim();
+    if (input.dataset.reportingField === 'startDate' || input.dataset.reportingField === 'endDate') {
+        const normalizedDate = parseReportingDate(value);
+        if (normalizedDate === null) {
+            input.setCustomValidity('Enter a date as DD-MM-YYYY or YYYY-MM-DD.');
+            input.reportValidity();
+            reportingStatus(type).textContent = 'Date not saved. Use DD-MM-YYYY or YYYY-MM-DD.';
+            return;
+        }
+        input.setCustomValidity('');
+        value = normalizedDate;
+        input.value = formatReportingDateForInput(value);
+    }
+
+    const previousData = JSON.parse(JSON.stringify(appData));
+    project.reporting ||= {};
+    project.reporting[type] ||= {};
+    project.reporting[type][input.dataset.reportingField] = value;
+    const status = reportingStatus(type);
+    status.textContent = 'Saving…';
+    try {
+        const result = await window.electronAPI.saveData(appData);
+        if (!result?.success) throw new Error(result?.error || 'Unable to save reporting settings.');
+        status.textContent = 'Settings saved';
+    } catch (error) {
+        appData = previousData;
+        status.textContent = 'Save failed';
+        alert(`Error saving reporting settings: ${error.message}`);
+    }
+}
+
+async function saveSearchConsoleConnection(event) {
+    event.preventDefault();
+    const clientId = document.getElementById('search-console-connection-client-id').value;
+    const projectId = document.getElementById('search-console-connection-project-id').value;
+    const client = appData.clients.find(item => item.id === clientId);
+    const project = client?.projects.find(item => item.id === projectId);
+    if (!client || !project) return;
+
+    const previousData = JSON.parse(JSON.stringify(appData));
+    project.reporting ||= {};
+    project.reporting.searchConsole ||= {};
+    project.reporting.searchConsole.spreadsheetId = document.getElementById('search-console-spreadsheet-id').value.trim();
+    project.reporting.searchConsole.scriptUrl = document.getElementById('search-console-script-url').value.trim();
+    const status = reportingStatus('searchConsole');
+    status.textContent = 'Saving connection…';
+    try {
+        const result = await window.electronAPI.saveData(appData);
+        if (!result?.success) throw new Error(result?.error || 'Unable to save the Search Console connection.');
+        closeAllModals();
+        status.textContent = `Connection saved for ${project.name}.`;
+    } catch (error) {
+        appData = previousData;
+        status.textContent = 'Connection save failed';
+        alert(`Error saving Search Console connection: ${error.message}`);
+    }
+}
+
+async function runAllSearchConsole() {
+    if (isRunningSearchConsoleAll) return;
+    const rows = [...document.querySelectorAll('#search-console-rows tr[data-project-id]')];
+    const status = reportingStatus('searchConsole');
+    const runAllButton = document.getElementById('search-console-run-all');
+    if (!rows.length) {
+        status.textContent = 'There are no projects to run.';
+        return;
+    }
+
+    isRunningSearchConsoleAll = true;
+    runAllButton.disabled = true;
+    runAllButton.classList.add('opacity-60', 'cursor-not-allowed');
+    const runButtons = [...document.querySelectorAll('.reporting-run[data-workflow="searchConsole"]')];
+    runButtons.forEach(runButton => {
+        runButton.disabled = true;
+        runButton.classList.add('opacity-60', 'cursor-not-allowed');
+    });
+
+    let started = 0;
+    const failures = [];
+    try {
+        for (let index = 0; index < rows.length; index++) {
+            const row = rows[index];
+            const project = appData.clients
+                .find(client => client.id === row.dataset.clientId)
+                ?.projects.find(item => item.id === row.dataset.projectId);
+            status.textContent = `Starting ${index + 1} of ${rows.length}${project ? ` · ${project.name}` : ''}…`;
+            const button = row.querySelector('.reporting-run');
+            const result = await runReportingWorkflow(button, { fromRunAll: true });
+            if (result.success) started++;
+            else failures.push(`${project?.name || 'Unknown project'}: ${result.message}`);
+        }
+        status.textContent = failures.length
+            ? `Started ${started} of ${rows.length}. Could not start: ${failures.join('; ')}`
+            : `Started Search Console for all ${started} projects.`;
+    } finally {
+        isRunningSearchConsoleAll = false;
+        runAllButton.disabled = false;
+        runAllButton.classList.remove('opacity-60', 'cursor-not-allowed');
+        runButtons.forEach(runButton => {
+            runButton.disabled = false;
+            runButton.classList.remove('opacity-60', 'cursor-not-allowed');
+        });
+    }
+}
+
+async function runReportingWorkflow(button, { fromRunAll = false } = {}) {
+    if (!button || (isRunningSearchConsoleAll && !fromRunAll)) return { success: false, message: 'Run all is in progress.' };
+    const row = button.closest('tr');
+    const type = button.dataset.workflow;
+    const client = appData.clients.find(item => item.id === row.dataset.clientId);
+    const project = client?.projects.find(item => item.id === row.dataset.projectId);
+    if (!client || !project) return { success: false, message: 'Project not found.' };
+
+    const status = reportingStatus(type);
+    const runButtons = [...document.querySelectorAll(`.reporting-run[data-workflow="${type}"]`)];
+    if (!fromRunAll) runButtons.forEach(runButton => {
+        runButton.disabled = true;
+        runButton.classList.add('opacity-60', 'cursor-not-allowed');
+    });
+    status.textContent = 'Preparing…';
+    try {
+        if (type === 'searchConsole') {
+            const workflow = window.reportingWorkflows.searchConsole;
+            const settings = workflow.getSettings(project);
+            const url = workflow.createLaunchUrl({
+                scriptUrl: settings.scriptUrl,
+                spreadsheetId: workflow.getSpreadsheetId(project),
+                settings
+            });
+            const result = await window.electronAPI.launchUrlWithProfile({
+                url,
+                profileDir: client.chromeProfile?.directory || 'Default'
+            });
+            if (!result?.success) throw new Error(result?.error || 'Unable to open the client Apps Script.');
+            status.textContent = `Search Console run started for ${project.name}.`;
+            return { success: true };
+        }
+        throw new Error('Unknown reporting workflow.');
+    } catch (error) {
+        status.textContent = `Not run: ${error.message}`;
+        return { success: false, message: error.message };
+    } finally {
+        if (!fromRunAll) runButtons.forEach(runButton => {
+            runButton.disabled = false;
+            runButton.classList.remove('opacity-60', 'cursor-not-allowed');
+        });
+    }
+}
+
+function showSectionView(type) {
+    currentClientId = null;
+    document.getElementById('add-client-btn').classList.add('hidden');
+    document.getElementById('add-project-btn').classList.add('hidden');
+    clientsView.classList.add('hidden');
+    workspaceView.classList.add('hidden');
+    sectionView.classList.remove('hidden');
+    sectionView.classList.add('animate-in', 'fade-in', 'slide-in-from-right-4', 'duration-200');
+    document.getElementById('search-input').parentElement.classList.add('hidden');
+    renderReportingSection(type);
+}
+
 function openClientWorkspace(id) {
     currentClientId = id;
     document.getElementById('add-client-btn').classList.add('hidden');
     document.getElementById('add-project-btn').classList.remove('hidden');
     clientsView.classList.add('hidden');
+    sectionView.classList.add('hidden');
     workspaceView.classList.remove('hidden');
     workspaceView.classList.add('animate-in', 'fade-in', 'slide-in-from-right-4', 'duration-200');
 

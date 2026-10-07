@@ -25,6 +25,7 @@
             --accent: #2563eb;
             --accent-soft: #e7efff;
             --danger: #d84a59;
+            --modal-backdrop: rgba(30, 48, 75, 0.32);
         }
 
         .theme-dark {
@@ -42,6 +43,7 @@
             --accent: #6d9bff;
             --accent-soft: #263b61;
             --danger: #ff7d88;
+            --modal-backdrop: rgba(8, 15, 27, 0.58);
         }
 
         body {
@@ -119,12 +121,21 @@
         .theme-dark #clients-view h2, .theme-dark .client-card .theme-text,
         .theme-dark .project-card .theme-text, .theme-dark .modal-panel .theme-text,
         .theme-dark .settings-content .theme-text { color: var(--text-primary) !important; }
-        .theme-dark .modal-panel h3, .theme-dark .modal-panel label,
+        .theme-dark .modal-panel h3,
         .theme-dark .settings-content h4, .theme-dark .settings-content span { color: var(--text-primary); }
-        .theme-dark .modal-panel { background: var(--surface); border-color: var(--border-color); }
-        .modal-panel { color: var(--text-primary); }
+        .modal-panel {
+            color: var(--text-primary);
+            background: var(--surface);
+            border-color: var(--border-color);
+            box-shadow: 0 24px 70px rgba(20, 33, 59, 0.18);
+        }
+        .theme-dark .modal-panel { box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38); }
+        .modal-panel label { color: var(--text-secondary); }
         .form-control { color: var(--text-primary); background: var(--input-bg); border-color: var(--border-color); }
         .form-control::placeholder { color: var(--text-secondary); opacity: 0.72; }
+        .form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+        .modal-panel .close-modal { color: var(--text-secondary); }
+        .modal-panel .close-modal:hover { color: var(--accent); background: var(--surface-muted); }
         .subtle-surface { color: var(--text-secondary); background: var(--surface-muted); border-color: var(--border-color); }
         .profile-row { color: var(--text-primary); background: var(--surface-muted); border-color: var(--border-color); }
         .resource-fields-grid { max-height: 48vh; }
@@ -173,6 +184,30 @@
         }
         .icon-button:hover { color: var(--accent); border-color: var(--accent); }
         .icon-button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+        .section-nav-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 40px;
+            padding: 0 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            background: var(--surface);
+            font-size: 13px;
+            font-weight: 600;
+            transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+        }
+        .section-nav-button:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+        .section-nav-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .reporting-table { min-width: 1280px; }
+        .reporting-table th { color: var(--text-secondary); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+        .reporting-table td, .reporting-table th { padding: 12px; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: middle; }
+        .reporting-table tr:last-child td { border-bottom: 0; }
+        .reporting-control { width: 100%; min-width: 112px; height: 38px; padding: 0 10px; border: 1px solid var(--border-color); border-radius: 9px; color: var(--text-primary); background: var(--input-bg); font-size: 12px; outline: none; }
+        .reporting-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+        .reporting-control::placeholder { color: var(--text-secondary); opacity: 0.72; }
+        .reporting-table td:first-child { min-width: 150px; }
         .shortcut-hint {
             flex: none;
             white-space: nowrap;
@@ -197,8 +232,8 @@
         }
 
         .modal {
-            background-color: rgba(0, 0, 0, 0.55);
-            backdrop-filter: blur(8px);
+            background-color: var(--modal-backdrop);
+            backdrop-filter: blur(5px);
             display: none;
         }
         .modal.active {
@@ -265,9 +300,11 @@
     <main class="app-shell main-content mx-auto px-6 py-7">
         <div id="clients-view">
             <div class="flex items-end justify-between gap-4 mb-6">
-                <div>
+                <div class="flex items-center gap-4 flex-wrap">
                     <h2 class="text-3xl font-bold theme-text">Clients</h2>
-                    <p class="muted-text mt-1 text-sm">Select a client to view their projects</p>
+                    <div class="flex items-center gap-2">
+                        <button id="search-console-btn" class="section-nav-button" type="button"><i class="fas fa-search text-sm"></i> Search Console</button>
+                    </div>
                 </div>
                 <div class="flex items-center gap-1 p-1 rounded-xl border border-[var(--border-color)]" style="background: var(--surface);">
                     <button id="grid-view-btn" class="icon-button !w-9 !h-9 !border-0" type="button" title="Grid view" aria-label="Grid view" aria-pressed="true"><i class="fas fa-th-large"></i></button>
@@ -295,7 +332,61 @@
             </div>
             <div id="project-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
         </div>
+
+        <section id="section-view" class="hidden" aria-live="polite">
+            <button id="section-back-to-clients" class="muted-text hover:text-blue-600 font-medium flex items-center mb-5 transition-colors" type="button"><i class="fas fa-arrow-left mr-2"></i> Back to Clients</button>
+            <div class="mb-6 flex items-end justify-between gap-4 flex-wrap">
+                <div>
+                    <h2 id="section-title" class="text-3xl font-bold theme-text"></h2>
+                    <p id="section-description" class="muted-text text-sm mt-2"></p>
+                </div>
+                <button id="search-console-run-all" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-semibold text-sm transition-colors whitespace-nowrap" type="button"><i class="fas fa-play mr-2 text-xs"></i>Run all</button>
+            </div>
+            <div id="search-console-panel" class="hidden">
+                <p id="search-console-status" class="muted-text text-xs mb-3 min-h-4" role="status" aria-live="polite"></p>
+                <div class="surface-card rounded-2xl overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="reporting-table w-full" data-reporting-type="searchConsole">
+                            <thead><tr><th>Project</th><th>Property URL</th><th>Start Date</th><th>End Date</th><th>Dimension</th><th>Search Type</th><th>Country</th><th>Output Mode</th><th>Sheet Name</th><th>Run</th></tr></thead>
+                            <tbody id="search-console-rows"></tbody>
+                        </table>
+                    </div>
+                    <div id="search-console-empty" class="hidden p-10 text-center muted-text text-sm">Add a project to a client to configure Search Console reporting.</div>
+                </div>
+                <p class="muted-text text-xs mt-3">Each run uses the client’s Chrome profile and starts the connected Apps Script automatically. Download a spreadsheet copy manually before running if you want a backup.</p>
+            </div>
+        </section>
     </main>
+
+    <!-- Search Console connection editor -->
+    <div id="search-console-connection-modal" class="modal fixed inset-0 z-50 items-center justify-center p-4">
+        <div class="modal-panel rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border">
+            <div class="px-6 py-4 border-b border-[var(--border-color)] flex justify-between items-center">
+                <div>
+                    <h3 class="theme-text text-lg font-bold">Search Console connection</h3>
+                    <p id="search-console-connection-project" class="muted-text text-xs mt-1"></p>
+                </div>
+                <button type="button" class="close-modal icon-button !border-0 !bg-transparent" title="Close" aria-label="Close"><i class="fas fa-times"></i></button>
+            </div>
+            <form id="search-console-connection-form" class="p-6">
+                <input type="hidden" id="search-console-connection-client-id">
+                <input type="hidden" id="search-console-connection-project-id">
+                <div class="mb-4">
+                    <label for="search-console-spreadsheet-id" class="block text-xs font-bold uppercase mb-2">Spreadsheet ID</label>
+                    <input type="text" id="search-console-spreadsheet-id" class="form-control w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Google Sheets ID">
+                </div>
+                <div>
+                    <label for="search-console-script-url" class="block text-xs font-bold uppercase mb-2">Apps Script URL</label>
+                    <input type="url" id="search-console-script-url" class="form-control w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="https://script.google.com/macros/s/.../exec">
+                </div>
+                <p class="muted-text text-xs mt-4">This connection is used with the selected client’s Chrome profile.</p>
+                <div class="flex justify-end space-x-3 mt-8">
+                    <button type="button" class="close-modal muted-text px-4 py-2 font-medium hover:bg-[var(--surface-muted)] rounded-lg transition-colors">Cancel</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-900/20">Save connection</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <!-- Client Modal (Add/Edit) -->
     <div id="client-modal" class="modal fixed inset-0 z-50 items-center justify-center p-4">
@@ -307,15 +398,15 @@
             <form id="client-form" class="p-6">
                 <input type="hidden" id="client-id-input">
                 <div class="mb-4">
-                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Client Name</label>
+                    <label class="block text-xs font-bold uppercase mb-2">Client Name</label>
                     <input type="text" id="client-name-input" required class="form-control w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Acme Corp">
                 </div>
                 <div class="mb-4">
-                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Email / Account</label>
+                    <label class="block text-xs font-bold uppercase mb-2">Email / Account</label>
                     <input type="email" id="client-email-input" class="form-control w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="client@example.com">
                 </div>
                 <div class="mb-4">
-                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Chrome Profile</label>
+                    <label class="block text-xs font-bold uppercase mb-2">Chrome Profile</label>
                     <select id="client-profile-input" class="form-control w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
                         <!-- Profiles injected here -->
                     </select>
@@ -338,12 +429,12 @@
             <form id="project-form" class="p-6 overflow-y-auto">
                 <input type="hidden" id="project-id-input">
                 <div class="mb-6">
-                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Project Name</label>
+                    <label class="block text-xs font-bold uppercase mb-2">Project Name</label>
                     <input type="text" id="project-name-input" required class="form-control w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Main Website">
                 </div>
 
                 <div class="flex items-center justify-between gap-3 mb-3">
-                    <label class="block text-xs font-bold text-slate-400 uppercase">Resources</label>
+                    <label class="block text-xs font-bold uppercase">Resources</label>
                     <button id="add-resource-btn" type="button" class="muted-text hover:text-blue-600 px-3 py-2 rounded-lg text-sm font-semibold transition-colors">
                         <i class="fas fa-plus mr-1"></i> Add Resource
                     </button>
@@ -419,6 +510,7 @@
         </div>
     </div>
 
+    <script src="reporting.js"></script>
     <script src="renderer.js"></script>
 </body>
 </html>
