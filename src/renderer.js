@@ -370,6 +370,7 @@ function setupEventListeners() {
     });
     sectionView.addEventListener('input', (event) => {
         if (event.target.matches('[data-reporting-field]')) event.target.setCustomValidity('');
+        if (event.target.matches('[data-search-console-master-field]')) event.target.setCustomValidity('');
     });
     sectionView.addEventListener('click', (event) => {
         const sheetButton = event.target.closest('.reporting-open-sheet');
@@ -386,6 +387,7 @@ function setupEventListeners() {
         if (runButton) runReportingWorkflow(runButton);
     });
     document.getElementById('search-console-run-all').addEventListener('click', runAllSearchConsole);
+    document.getElementById('search-console-apply-master').addEventListener('click', applySearchConsoleMasterSettings);
     document.getElementById('add-client-btn').addEventListener('click', () => openClientModal());
     document.getElementById('add-project-btn').addEventListener('click', () => openProjectModal());
     document.getElementById('add-resource-btn').addEventListener('click', () => {
@@ -650,9 +652,12 @@ function reportingStatus(type) {
 }
 
 function renderReportingSection(type) {
-    document.getElementById('section-title').textContent = 'Search Console';
-    document.getElementById('section-description').textContent = 'Configure Search Console reports for each client and project. Use Edit to set the sheet and Apps Script.';
     document.getElementById('search-console-panel').classList.remove('hidden');
+
+    const masterSettings = appData.reportingDefaults?.searchConsole || {};
+    document.getElementById('search-console-master-start-date').value = formatReportingDateForInput(masterSettings.startDate);
+    document.getElementById('search-console-master-end-date').value = formatReportingDateForInput(masterSettings.endDate);
+    document.getElementById('search-console-master-sheet-name').value = masterSettings.sheetName || '';
 
     const rows = getReportingProjects();
     const tbody = document.getElementById('search-console-rows');
@@ -676,6 +681,58 @@ function renderReportingSection(type) {
     }).join('');
     emptyState.classList.toggle('hidden', rows.length > 0);
     tbody.closest('table').classList.toggle('hidden', rows.length === 0);
+}
+
+async function applySearchConsoleMasterSettings() {
+    const startInput = document.getElementById('search-console-master-start-date');
+    const endInput = document.getElementById('search-console-master-end-date');
+    const sheetNameInput = document.getElementById('search-console-master-sheet-name');
+    const status = reportingStatus('searchConsole');
+    const startDate = parseReportingDate(startInput.value);
+    const endDate = parseReportingDate(endInput.value);
+    const sheetName = sheetNameInput.value.trim();
+
+    startInput.setCustomValidity(startDate ? '' : 'Enter the start date as DD-MM-YYYY or YYYY-MM-DD.');
+    endInput.setCustomValidity(endDate ? '' : 'Enter the end date as DD-MM-YYYY or YYYY-MM-DD.');
+    sheetNameInput.setCustomValidity(sheetName ? '' : 'Enter a sheet name.');
+    if (!startDate) { startInput.reportValidity(); status.textContent = 'Enter a valid master start date.'; return; }
+    if (!endDate) { endInput.reportValidity(); status.textContent = 'Enter a valid master end date.'; return; }
+    if (startDate > endDate) {
+        endInput.setCustomValidity('End date must be on or after the start date.');
+        endInput.reportValidity();
+        status.textContent = 'End date must be on or after the start date.';
+        return;
+    }
+    if (!sheetName) { sheetNameInput.reportValidity(); status.textContent = 'Enter a master sheet name.'; return; }
+
+    const projects = getReportingProjects();
+    if (!projects.length) {
+        status.textContent = 'There are no projects to update yet.';
+        return;
+    }
+
+    const previousData = JSON.parse(JSON.stringify(appData));
+    appData.reportingDefaults ||= {};
+    appData.reportingDefaults.searchConsole = { startDate, endDate, sheetName };
+    projects.forEach(({ project }) => {
+        project.reporting ||= {};
+        project.reporting.searchConsole ||= {};
+        Object.assign(project.reporting.searchConsole, { startDate, endDate, sheetName });
+    });
+
+    status.textContent = 'Applying master settings…';
+    try {
+        const result = await window.electronAPI.saveData(appData);
+        if (!result?.success) throw new Error(result?.error || 'Unable to save the master settings.');
+        startInput.value = formatReportingDateForInput(startDate);
+        endInput.value = formatReportingDateForInput(endDate);
+        renderReportingSection('searchConsole');
+        status.textContent = `Applied dates and sheet name to all ${projects.length} projects.`;
+    } catch (error) {
+        appData = previousData;
+        status.textContent = 'Master settings could not be saved.';
+        alert(`Error applying master settings: ${error.message}`);
+    }
 }
 
 async function openReportingSpreadsheet(button) {
