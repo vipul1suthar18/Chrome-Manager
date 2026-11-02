@@ -2,7 +2,7 @@
 // a separate controller section; existing client-card GA4 links are untouched.
 (function exposeReportingWorkflows(global) {
     const searchConsoleFields = [
-        'spreadsheetId', 'scriptUrl', 'propertyUrl', 'startDate', 'endDate', 'dimension', 'searchType',
+        'spreadsheetId', 'scriptUrl', 'editorUrl', 'propertyUrl', 'startDate', 'endDate', 'dimension', 'searchType',
         'country', 'outputMode', 'sheetName'
     ];
 

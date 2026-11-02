@@ -5,6 +5,7 @@ let currentClientId = null;
 let deleteTarget = null; // { type: 'client'|'project', id: string }
 let clientViewMode = 'grid';
 let isRunningSearchConsoleAll = false;
+let isDownloadingSearchConsoleAll = false;
 
 // UI Elements
 const clientGrid = document.getElementById('client-grid');
@@ -346,7 +347,51 @@ function openSearchConsoleConnectionModal(clientId, projectId) {
     document.getElementById('search-console-connection-project').textContent = `${client.name} · ${project.name}`;
     document.getElementById('search-console-spreadsheet-id').value = workflow.getSpreadsheetId(project);
     document.getElementById('search-console-script-url').value = settings.scriptUrl;
+    document.getElementById('search-console-editor-url').value = settings.editorUrl;
     searchConsoleConnectionModal.classList.add('active');
+}
+
+function normalizeAppsScriptEditorUrl(value) {
+    const rawUrl = String(value || '').trim();
+    if (!rawUrl) return '';
+    let url;
+    try { url = new URL(rawUrl); }
+    catch { throw new Error('Enter a valid Apps Script editor URL.'); }
+    if (url.protocol !== 'https:' || url.hostname !== 'script.google.com' || !/^\/(?:u\/\d+\/)?home\/projects\/[^/]+\/edit\/?$/.test(url.pathname)) {
+        throw new Error('Use the Apps Script editor URL ending in /home/projects/…/edit, not the deployed /exec link.');
+    }
+    return url.toString();
+}
+
+async function openSearchConsoleScript(button) {
+    const client = appData.clients.find(item => item.id === button.dataset.clientId);
+    const project = client?.projects.find(item => item.id === button.dataset.projectId);
+    if (!client || !project) return;
+
+    const status = reportingStatus('searchConsole');
+    const settings = window.reportingWorkflows.searchConsole.getSettings(project);
+    if (!settings.editorUrl) {
+        openSearchConsoleConnectionModal(client.id, project.id);
+        status.textContent = `Add the Apps Script editor link for ${project.name}, then save the connection.`;
+        return;
+    }
+
+    let editorUrl;
+    try { editorUrl = normalizeAppsScriptEditorUrl(settings.editorUrl); }
+    catch (error) {
+        openSearchConsoleConnectionModal(client.id, project.id);
+        status.textContent = error.message;
+        return;
+    }
+
+    status.textContent = `Opening ${project.name} Apps Script…`;
+    const result = await window.electronAPI.launchUrlWithProfile({
+        url: editorUrl,
+        profileDir: client.chromeProfile?.directory || 'Default'
+    });
+    status.textContent = result?.success
+        ? `Opened ${project.name} Apps Script in ${client.chromeProfile?.name || 'Default'} Chrome.`
+        : `Could not open ${project.name} Apps Script: ${result?.error || 'Chrome could not open the link.'}`;
 }
 
 function showDeleteConfirm(type, id) {
@@ -398,13 +443,18 @@ function setupEventListeners() {
             openSearchConsoleConnectionModal(editConnectionButton.dataset.clientId, editConnectionButton.dataset.projectId);
             return;
         }
+        const openScriptButton = event.target.closest('.reporting-open-script');
+        if (openScriptButton) {
+            openSearchConsoleScript(openScriptButton);
+            return;
+        }
         const runButton = event.target.closest('.reporting-run');
         if (runButton) runReportingWorkflow(runButton);
-        const configRowsButton = event.target.closest('.reporting-run-config');
-        if (configRowsButton) runReportingWorkflow(configRowsButton, { runAllConfigRows: true });
+        const downloadButton = event.target.closest('.reporting-download');
+        if (downloadButton) downloadProjectWorkbook(downloadButton);
     });
     document.getElementById('search-console-run-all').addEventListener('click', () => runAllSearchConsole());
-    document.getElementById('search-console-run-all-config').addEventListener('click', () => runAllSearchConsole({ runAllConfigRows: true }));
+    document.getElementById('search-console-download-all').addEventListener('click', () => downloadAllSearchConsoleWorkbooks());
     document.getElementById('search-console-apply-master').addEventListener('click', applySearchConsoleMasterSettings);
     document.getElementById('add-client-btn').addEventListener('click', () => openClientModal());
     document.getElementById('add-project-btn').addEventListener('click', () => openProjectModal());
@@ -690,8 +740,9 @@ function renderReportingSection(type) {
     tbody.innerHTML = rows.map(({ client, project }) => {
         const settings = window.reportingWorkflows.searchConsole.getSettings(project);
         const spreadsheetId = window.reportingWorkflows.searchConsole.getSpreadsheetId(project);
-        const connectionEditor = `<button type="button" class="reporting-edit-connection mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[var(--border-color)] muted-text text-xs font-semibold hover:text-blue-600 hover:border-blue-500 transition-colors" data-client-id="${escapeHtml(client.id)}" data-project-id="${escapeHtml(project.id)}"><i class="fas fa-sliders-h" aria-hidden="true"></i><span>Edit</span></button>`;
-        const projectCell = `<button type="button" class="reporting-open-sheet block max-w-44 text-left font-semibold theme-text truncate hover:text-blue-600 hover:underline underline-offset-2 transition-colors" data-client-id="${escapeHtml(client.id)}" data-project-id="${escapeHtml(project.id)}" aria-label="Open ${escapeHtml(project.name)} spreadsheet in its Chrome profile" title="Open connected spreadsheet">${escapeHtml(project.name)}</button>${connectionEditor}`;
+        const connectionEditor = `<button type="button" class="reporting-edit-connection inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[var(--border-color)] muted-text text-xs font-semibold hover:text-blue-600 hover:border-blue-500 transition-colors" data-client-id="${escapeHtml(client.id)}" data-project-id="${escapeHtml(project.id)}"><i class="fas fa-sliders-h" aria-hidden="true"></i><span>Edit</span></button>`;
+        const openScript = `<button type="button" class="reporting-open-script inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[var(--border-color)] muted-text text-xs font-semibold hover:text-blue-600 hover:border-blue-500 transition-colors" data-client-id="${escapeHtml(client.id)}" data-project-id="${escapeHtml(project.id)}" title="Open this project's Apps Script editor in its Chrome profile"><i class="fas fa-code" aria-hidden="true"></i><span>Open script</span></button>`;
+        const projectCell = `<button type="button" class="reporting-open-sheet block max-w-44 text-left font-semibold theme-text truncate hover:text-blue-600 hover:underline underline-offset-2 transition-colors" data-client-id="${escapeHtml(client.id)}" data-project-id="${escapeHtml(project.id)}" aria-label="Open ${escapeHtml(project.name)} spreadsheet in its Chrome profile" title="Open connected spreadsheet">${escapeHtml(project.name)}</button><div class="mt-2 flex flex-wrap gap-1.5">${openScript}${connectionEditor}</div>`;
         const inputs = [
             reportingInput('propertyUrl', window.reportingWorkflows.searchConsole.getPropertyUrl(project), `${project.name} Property URL`),
             reportingInput('startDate', settings.startDate, `${project.name} Start Date`, 'date'),
@@ -702,7 +753,7 @@ function renderReportingSection(type) {
             reportingInput('outputMode', settings.outputMode, `${project.name} Output Mode`),
             reportingInput('sheetName', settings.sheetName, `${project.name} Sheet Name`)
         ];
-        return `<tr data-client-id="${escapeHtml(client.id)}" data-project-id="${escapeHtml(project.id)}"><td>${projectCell}</td>${inputs.map(input => `<td>${input}</td>`).join('')}<td><div class="flex flex-col gap-1.5"><button type="button" class="reporting-run bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg font-semibold text-xs transition-colors whitespace-nowrap" data-workflow="searchConsole">Run</button><button type="button" class="reporting-run-config bg-slate-600 hover:bg-slate-500 text-white px-3 py-2 rounded-lg font-semibold text-xs transition-colors whitespace-nowrap" data-workflow="searchConsole" title="Run every filled row in this project's Config tab">Run Config rows</button></div></td></tr>`;
+        return `<tr data-client-id="${escapeHtml(client.id)}" data-project-id="${escapeHtml(project.id)}"><td>${projectCell}</td>${inputs.map(input => `<td>${input}</td>`).join('')}<td><div class="flex flex-row items-center gap-2"><button type="button" class="reporting-run bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg font-semibold text-xs transition-colors whitespace-nowrap" data-workflow="searchConsole">Run</button><button type="button" class="reporting-download bg-slate-600 hover:bg-slate-500 text-white px-3 py-2 rounded-lg font-semibold text-xs transition-colors whitespace-nowrap" data-workflow="searchConsole" title="Download this workbook with all report tabs">Download</button></div></td></tr>`;
     }).join('');
     emptyState.classList.toggle('hidden', rows.length > 0);
     tbody.closest('table').classList.toggle('hidden', rows.length === 0);
@@ -926,11 +977,20 @@ async function saveSearchConsoleConnection(event) {
     const project = client?.projects.find(item => item.id === projectId);
     if (!client || !project) return;
 
+    let editorUrl;
+    try {
+        editorUrl = normalizeAppsScriptEditorUrl(document.getElementById('search-console-editor-url').value);
+    } catch (error) {
+        reportingStatus('searchConsole').textContent = error.message;
+        return;
+    }
+
     const previousData = JSON.parse(JSON.stringify(appData));
     project.reporting ||= {};
     project.reporting.searchConsole ||= {};
     project.reporting.searchConsole.spreadsheetId = document.getElementById('search-console-spreadsheet-id').value.trim();
     project.reporting.searchConsole.scriptUrl = document.getElementById('search-console-script-url').value.trim();
+    project.reporting.searchConsole.editorUrl = editorUrl;
     const status = reportingStatus('searchConsole');
     status.textContent = 'Saving connection…';
     try {
@@ -945,14 +1005,11 @@ async function saveSearchConsoleConnection(event) {
     }
 }
 
-async function runAllSearchConsole({ runAllConfigRows = false } = {}) {
+async function runAllSearchConsole() {
     if (isRunningSearchConsoleAll) return;
     const rows = [...document.querySelectorAll('#search-console-rows tr[data-project-id]')];
     const status = reportingStatus('searchConsole');
-    const runAllButtons = [
-        document.getElementById('search-console-run-all'),
-        document.getElementById('search-console-run-all-config')
-    ];
+    const runAllButtons = [document.getElementById('search-console-run-all')];
     if (!rows.length) {
         status.textContent = 'There are no projects to run.';
         return;
@@ -963,7 +1020,7 @@ async function runAllSearchConsole({ runAllConfigRows = false } = {}) {
         button.disabled = true;
         button.classList.add('opacity-60', 'cursor-not-allowed');
     });
-    const runButtons = [...document.querySelectorAll('.reporting-run[data-workflow="searchConsole"], .reporting-run-config[data-workflow="searchConsole"]')];
+    const runButtons = [...document.querySelectorAll('.reporting-run[data-workflow="searchConsole"]')];
     runButtons.forEach(runButton => {
         runButton.disabled = true;
         runButton.classList.add('opacity-60', 'cursor-not-allowed');
@@ -977,13 +1034,13 @@ async function runAllSearchConsole({ runAllConfigRows = false } = {}) {
             const project = appData.clients
                 .find(client => client.id === row.dataset.clientId)
                 ?.projects.find(item => item.id === row.dataset.projectId);
-            status.textContent = `Starting ${runAllConfigRows ? 'Config batch ' : ''}${index + 1} of ${rows.length}${project ? ` · ${project.name}` : ''}…`;
-            const button = row.querySelector(runAllConfigRows ? '.reporting-run-config' : '.reporting-run');
-            const result = await runReportingWorkflow(button, { fromRunAll: true, runAllConfigRows });
+            status.textContent = `Starting ${index + 1} of ${rows.length}${project ? ` · ${project.name}` : ''}…`;
+            const button = row.querySelector('.reporting-run');
+            const result = await runReportingWorkflow(button, { fromRunAll: true });
             if (result.success) started++;
             else failures.push(`${project?.name || 'Unknown project'}: ${result.message}`);
         }
-        const actionName = runAllConfigRows ? 'Config-row batches' : 'Search Console';
+        const actionName = 'Search Console';
         status.textContent = failures.length
             ? `Started ${started} of ${rows.length} ${actionName}. Could not start: ${failures.join('; ')}`
             : `Started ${actionName} for all ${started} projects.`;
@@ -1000,7 +1057,7 @@ async function runAllSearchConsole({ runAllConfigRows = false } = {}) {
     }
 }
 
-async function runReportingWorkflow(button, { fromRunAll = false, runAllConfigRows = false } = {}) {
+async function runReportingWorkflow(button, { fromRunAll = false } = {}) {
     if (!button || (isRunningSearchConsoleAll && !fromRunAll)) return { success: false, message: 'Run all is in progress.' };
     const row = button.closest('tr');
     const type = button.dataset.workflow;
@@ -1009,13 +1066,12 @@ async function runReportingWorkflow(button, { fromRunAll = false, runAllConfigRo
     if (!client || !project) return { success: false, message: 'Project not found.' };
 
     const status = reportingStatus(type);
-    const runButtons = [...document.querySelectorAll(`.reporting-run[data-workflow="${type}"], .reporting-run-config[data-workflow="${type}"]`)];
+    const runButtons = [...document.querySelectorAll(`.reporting-run[data-workflow="${type}"]`)];
     if (!fromRunAll) runButtons.forEach(runButton => {
         runButton.disabled = true;
         runButton.classList.add('opacity-60', 'cursor-not-allowed');
     });
-    status.textContent = runAllConfigRows ? `Preparing Config rows for ${project.name}…` : 'Preparing…';
-    let downloadSessionId = '';
+    status.textContent = 'Preparing…';
     try {
         if (type === 'searchConsole') {
             const workflow = window.reportingWorkflows.searchConsole;
@@ -1025,32 +1081,20 @@ async function runReportingWorkflow(button, { fromRunAll = false, runAllConfigRo
                 scriptUrl: settings.scriptUrl,
                 spreadsheetId: workflow.getSpreadsheetId(project),
                 settings,
-                runAllConfigRows,
                 runId,
                 clientName: client.name,
                 projectName: project.name
             });
-            const download = await window.electronAPI.startReportDownloadOrganization({
-                clientName: client.name,
-                projectName: project.name,
-                profileDir: client.chromeProfile?.directory || 'Default'
-            });
-            if (!download?.success) throw new Error(download?.error || 'Could not prepare the local project folder.');
-            downloadSessionId = download.id;
             const result = await window.electronAPI.launchUrlWithProfile({
                 url,
                 profileDir: client.chromeProfile?.directory || 'Default'
             });
             if (!result?.success) throw new Error(result?.error || 'Unable to open the client Apps Script.');
-            status.textContent = runAllConfigRows
-                ? `Search Console Config-row batch started for ${project.name}. The finished workbook will be saved to ${download.destinationDirectory}.`
-                : `Search Console run started for ${project.name}. The finished workbook will be saved to ${download.destinationDirectory}.`;
-            monitorReportDownload(download.id, status, project.name);
+            status.textContent = `Search Console run started for ${project.name}. After all monthly reports finish, click Download all to save the workbook.`;
             return { success: true };
         }
         throw new Error('Unknown reporting workflow.');
     } catch (error) {
-        if (downloadSessionId) await window.electronAPI.cancelReportDownloadOrganization(downloadSessionId);
         status.textContent = `Not run: ${error.message}`;
         return { success: false, message: error.message };
     } finally {
@@ -1061,23 +1105,110 @@ async function runReportingWorkflow(button, { fromRunAll = false, runAllConfigRo
     }
 }
 
-async function monitorReportDownload(id, statusElement, projectName) {
-    if (!id) return;
-    const poll = async () => {
-        try {
-            const result = await window.electronAPI.getReportDownloadStatus(id);
-            if (result.status === 'saved') {
-                statusElement.textContent = `${projectName} workbook saved: ${result.savedPath}`;
-                return;
-            }
-            if (result.status === 'error' || result.status === 'not-found' || result.status === 'unknown') {
-                statusElement.textContent = `${projectName}: ${result.message}`;
-                return;
-            }
-        } catch { /* Keep waiting while Chrome finishes the workbook download. */ }
+async function downloadAllSearchConsoleWorkbooks() {
+    const mainButton = document.getElementById('search-console-download-all');
+    if (!mainButton || mainButton.disabled || isRunningSearchConsoleAll) return;
+    const buttons = [...document.querySelectorAll('#search-console-rows .reporting-download')];
+    const status = reportingStatus('searchConsole');
+    if (!buttons.length) {
+        status.textContent = 'There are no project workbooks to download.';
+        return;
+    }
+
+    mainButton.disabled = true;
+    isDownloadingSearchConsoleAll = true;
+    mainButton.classList.add('opacity-60', 'cursor-not-allowed');
+    buttons.forEach(button => { button.disabled = true; });
+    const failures = [];
+    let saved = 0;
+    try {
+        for (let index = 0; index < buttons.length; index += 1) {
+            const row = buttons[index].closest('tr');
+            const project = appData.clients
+                .find(client => client.id === row?.dataset.clientId)
+                ?.projects.find(item => item.id === row?.dataset.projectId);
+            status.textContent = `Downloading workbook ${index + 1} of ${buttons.length}${project ? ` · ${project.name}` : ''}…`;
+            const result = await downloadProjectWorkbook(buttons[index], { fromDownloadAll: true });
+            if (result?.success) saved += 1;
+            else failures.push(`${project?.name || 'Project'}: ${result?.message || 'Download failed.'}`);
+        }
+        status.textContent = failures.length
+            ? `Saved ${saved} of ${buttons.length} workbooks. ${failures.join('; ')}`
+            : `Saved all ${saved} workbooks to their project folders.`;
+    } finally {
+        mainButton.disabled = false;
+        isDownloadingSearchConsoleAll = false;
+        buttons.forEach(button => { button.disabled = false; });
+        mainButton.classList.remove('opacity-60', 'cursor-not-allowed');
+    }
+}
+
+async function downloadProjectWorkbook(button, { fromDownloadAll = false } = {}) {
+    if (isDownloadingSearchConsoleAll && !fromDownloadAll) return { success: false, message: 'Download all is in progress.' };
+    if (!button || (button.disabled && !fromDownloadAll)) return { success: false, message: 'Download is already in progress.' };
+    const row = button.closest('tr');
+    const client = appData.clients.find(item => item.id === row?.dataset.clientId);
+    const project = client?.projects.find(item => item.id === row?.dataset.projectId);
+    if (!client || !project) return { success: false, message: 'Project not found.' };
+
+    const status = reportingStatus('searchConsole');
+    const spreadsheetId = window.reportingWorkflows.searchConsole.getSpreadsheetId(project);
+    if (!spreadsheetId) {
+        status.textContent = `Add the spreadsheet ID for ${project.name} before downloading.`;
+        return { success: false, message: 'Spreadsheet ID is missing.' };
+    }
+
+    button.disabled = true;
+    let downloadSessionId = '';
+    try {
+        status.textContent = `Preparing ${project.name} workbook download…`;
+        const profileDir = client.chromeProfile?.directory || 'Default';
+        const download = await window.electronAPI.startReportDownloadOrganization({
+            clientName: client.name,
+            projectName: project.name,
+            profileDir
+        });
+        if (!download?.success) throw new Error(download?.error || 'Could not prepare the local project folder.');
+        downloadSessionId = download.id;
+
+        const result = await window.electronAPI.launchUrlWithProfile({
+            url: `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/export?format=xlsx`,
+            profileDir
+        });
+        if (!result?.success) throw new Error(result?.error || 'Unable to start the workbook download.');
+
+        status.textContent = `Downloading all tabs for ${project.name} to ${download.destinationDirectory}…`;
+        return await monitorReportDownload(download.id, status, project.name);
+    } catch (error) {
+        if (downloadSessionId) await window.electronAPI.cancelReportDownloadOrganization(downloadSessionId);
+        status.textContent = `Could not download ${project.name}: ${error.message}`;
+        return { success: false, message: error.message };
+    } finally {
+        button.disabled = false;
+    }
+}
+
+function monitorReportDownload(id, statusElement, projectName) {
+    if (!id) return Promise.resolve({ success: false, message: 'Download tracking is unavailable.' });
+    return new Promise(resolve => {
+        const poll = async () => {
+            try {
+                const result = await window.electronAPI.getReportDownloadStatus(id);
+                if (result.status === 'saved') {
+                    statusElement.textContent = `${projectName} workbook saved: ${result.savedPath}`;
+                    resolve({ success: true, path: result.savedPath });
+                    return;
+                }
+                if (result.status === 'error' || result.status === 'not-found' || result.status === 'unknown') {
+                    statusElement.textContent = `${projectName}: ${result.message}`;
+                    resolve({ success: false, message: result.message });
+                    return;
+                }
+            } catch { /* Keep waiting while Chrome finishes the workbook download. */ }
+            setTimeout(poll, 2500);
+        };
         setTimeout(poll, 2500);
-    };
-    setTimeout(poll, 2500);
+    });
 }
 
 function showSectionView(type) {

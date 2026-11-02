@@ -62,7 +62,7 @@
             backdrop-filter: blur(16px);
         }
 
-        .app-shell { max-width: 1440px; }
+        .app-shell { width: calc(100% - 48px); max-width: 1760px; }
         .header-search > div { max-width: 370px; }
 
         .surface-card {
@@ -200,14 +200,15 @@
         }
         .section-nav-button:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
         .section-nav-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-        .reporting-table { min-width: 1280px; }
+        .reporting-table { min-width: 1480px; }
         .reporting-table th { color: var(--text-secondary); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
         .reporting-table td, .reporting-table th { padding: 12px; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: middle; }
         .reporting-table tr:last-child td { border-bottom: 0; }
         .reporting-control { width: 100%; min-width: 112px; height: 38px; padding: 0 10px; border: 1px solid var(--border-color); border-radius: 9px; color: var(--text-primary); background: var(--input-bg); font-size: 12px; outline: none; }
         .reporting-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
         .reporting-control::placeholder { color: var(--text-secondary); opacity: 0.72; }
-        .reporting-table td:first-child { min-width: 150px; }
+        .reporting-table td:first-child { min-width: 170px; }
+        .reporting-table td:last-child { min-width: 220px; }
         .shortcut-hint {
             flex: none;
             white-space: nowrap;
@@ -334,7 +335,7 @@
                 </div>
             </div>
             <p id="client-search-console-status" class="hidden muted-text text-xs mt-2" role="status" aria-live="polite"></p>
-            <div id="project-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+            <div id="project-grid" class="grid grid-cols-1 lg:grid-cols-3 gap-4"></div>
         </div>
 
         <section id="section-view" class="hidden" aria-live="polite">
@@ -348,7 +349,7 @@
                         </div>
                         <div class="flex items-center gap-2 flex-wrap">
                             <button id="search-console-run-all" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-semibold text-sm transition-colors whitespace-nowrap" type="button"><i class="fas fa-play mr-2 text-xs"></i>Run all</button>
-                            <button id="search-console-run-all-config" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-semibold text-sm transition-colors whitespace-nowrap" type="button"><i class="fas fa-list-check mr-2 text-xs"></i>Run all Config rows</button>
+                            <button id="search-console-download-all" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-xl font-semibold text-sm transition-colors whitespace-nowrap" type="button"><i class="fas fa-download mr-2 text-xs"></i>Download all</button>
                             <button id="search-console-apply-master" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-semibold text-sm transition-colors whitespace-nowrap" type="button">Apply to all projects</button>
                         </div>
                     </div>
@@ -374,7 +375,7 @@
                     </div>
                     <div id="search-console-empty" class="hidden p-10 text-center muted-text text-sm">Add a project to a client to configure Search Console reporting.</div>
                 </div>
-                <p class="muted-text text-xs mt-3">Run uses the settings shown here. Run Config rows reads every filled row from that project’s Config tab and runs them in order. New Sheet keeps existing tabs; Replace Existing replaces the named tab. Chrome Manager downloads the completed workbook and organizes it in Downloads → Search Console Reports → date → group → project. Keep Chrome’s workbook downloads enabled; this requires the updated Apps Script bridge deployment.</p>
+                <p class="muted-text text-xs mt-3">Run each month with a different sheet name. Use a project’s Download button for that workbook’s tabs, or Download all to save every project workbook. New Sheet keeps existing tabs; Replace Existing replaces only the named tab. Downloads are organized by date, group, and project.</p>
             </div>
             <div id="analytics-panel" class="hidden">
                 <div class="flex items-start justify-between gap-4 flex-wrap mb-4">
@@ -418,7 +419,11 @@
                     <label for="search-console-script-url" class="block text-xs font-bold uppercase mb-2">Apps Script URL</label>
                     <input type="url" id="search-console-script-url" class="form-control w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="https://script.google.com/macros/s/.../exec">
                 </div>
-                <p class="muted-text text-xs mt-4">This connection is used with the selected client’s Chrome profile.</p>
+                <div class="mt-4">
+                    <label for="search-console-editor-url" class="block text-xs font-bold uppercase mb-2">Apps Script editor URL</label>
+                    <input type="url" id="search-console-editor-url" class="form-control w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="https://script.google.com/home/projects/.../edit">
+                </div>
+                <p class="muted-text text-xs mt-4">Open script uses this editor link in the selected client’s Chrome profile. Keep it separate from the report URL ending in /exec.</p>
                 <div class="flex justify-end space-x-3 mt-8">
                     <button type="button" class="close-modal muted-text px-4 py-2 font-medium hover:bg-[var(--surface-muted)] rounded-lg transition-colors">Cancel</button>
                     <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-900/20">Save connection</button>

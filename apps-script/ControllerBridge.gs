@@ -7,6 +7,30 @@
 
 var CHROME_MANAGER_SPREADSHEET_ID_KEY = 'CHROME_MANAGER_SPREADSHEET_ID';
 var CHROME_MANAGER_CONFIG_SHEET = 'Config';
+var CHROME_MANAGER_RUN_STATUS_PREFIX = 'CHROME_MANAGER_RUN_';
+
+/** Status helpers live in the bridge so it also works with older Code.gs files. */
+function chromeManagerSetRunStatus_(runId, status, message) {
+  if (!runId) return;
+  var safeId = String(runId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
+  var key = CHROME_MANAGER_RUN_STATUS_PREFIX + safeId;
+  PropertiesService.getScriptProperties().setProperty(key, JSON.stringify({
+    status: status,
+    message: message || ''
+  }));
+}
+
+function chromeManagerGetRunStatus(runId) {
+  var safeId = String(runId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
+  if (!safeId) return { status: 'missing', message: 'Run ID was not provided.' };
+  var properties = PropertiesService.getScriptProperties();
+  var key = CHROME_MANAGER_RUN_STATUS_PREFIX + safeId;
+  var raw = properties.getProperty(key);
+  if (!raw) return { status: 'running', message: 'The report is still running.' };
+  var result = JSON.parse(raw);
+  if (result.status === 'completed' || result.status === 'failed') properties.deleteProperty(key);
+  return result;
+}
 
 /** Optional setup helper; pass an ID for standalone Apps Script projects. */
 function authorizeChromeManager(spreadsheetId) {
@@ -146,27 +170,37 @@ function runSearchConsoleFromController(rawRequest) {
         state.chromeManagerRunId = request.runId;
       }
 
-      setChromeManagerRunStatus_(request.runId, 'running', 'The report is running.');
+      chromeManagerSetRunStatus_(request.runId, 'running', 'The report is running.');
       var result = runJobChunk_(state);
       if (result.done) {
-        var batch = advanceBatchState_(result.state || state, result);
-        if (batch.nextState) {
-          scheduleContinuation_(batch.nextState);
+        if (request.runAllConfigRows === 'true') {
+          var batch = advanceBatchState_(result.state || state, result);
+          if (batch.nextState) {
+            scheduleContinuation_(batch.nextState);
+            return {
+              success: true,
+              pending: true,
+              rowsWritten: batch.stats.rowsWritten,
+              message: 'Report 1 of ' + batch.stats.total + ' is complete. The remaining Config rows are queued in order.'
+            };
+          }
+          clearJobState_();
+          chromeManagerSetRunStatus_(request.runId, 'completed', 'The report finished.');
           return {
             success: true,
-            pending: true,
-            rowsWritten: batch.stats.rowsWritten,
-            message: 'Report 1 of ' + batch.stats.total + ' is complete. The remaining Config rows are queued in order.'
+            rowsWritten: batch.stats ? batch.stats.rowsWritten : result.totalRowsWritten,
+            message: batch.stats
+              ? 'Search Console batch completed. ' + batch.stats.completed + ' reports and ' + batch.stats.rowsWritten + ' rows were written.'
+              : 'Search Console report completed. ' + result.totalRowsWritten + ' rows were written.'
           };
         }
+
         clearJobState_();
-        setChromeManagerRunStatus_(request.runId, 'completed', 'The report finished.');
+        chromeManagerSetRunStatus_(request.runId, 'completed', 'The report finished.');
         return {
           success: true,
-          rowsWritten: batch.stats ? batch.stats.rowsWritten : result.totalRowsWritten,
-          message: batch.stats
-            ? 'Search Console batch completed. ' + batch.stats.completed + ' reports and ' + batch.stats.rowsWritten + ' rows were written.'
-            : 'Search Console report completed. ' + result.totalRowsWritten + ' rows were written.'
+          rowsWritten: result.totalRowsWritten,
+          message: 'Search Console report completed. ' + result.totalRowsWritten + ' rows were written.'
         };
       }
 
@@ -180,7 +214,7 @@ function runSearchConsoleFromController(rawRequest) {
           : 'The export is continuing in the background. ' + result.totalRowsWritten + ' rows were written in the first run.'
       };
     } catch (runError) {
-      setChromeManagerRunStatus_(request.runId, 'failed', runError.message || String(runError));
+      chromeManagerSetRunStatus_(request.runId, 'failed', runError.message || String(runError));
       return {
         success: false,
         message: 'The workflow stopped after spreadsheet changes may have started. Check the spreadsheet before trying again. ' + (runError.message || runError)
@@ -254,5 +288,8 @@ function chromeManagerConfirmationPage_(request, tabsToReplace, pageMessage, onl
     '<script>const request=' + requestJson + ';const tabs=' + tabsJson + ';const pageError=' + messageJson + ';const onlyConfigTab=' + onlyConfigJson + ';' +
     'const summary=document.getElementById("summary");if(request.runAllConfigRows==="true"){const p=document.createElement("p");p.textContent="Config rows to run: "+(request.configRowCount||0);summary.appendChild(p)}else{["propertyUrl","startDate","endDate","dimension","searchType","country","outputMode","sheetName"].forEach(k=>{const p=document.createElement("p");p.textContent=k+": "+(request[k]||"(blank)");summary.appendChild(p)})}' +
     'const cleanup=document.getElementById("cleanup");const h=document.createElement("strong");h.textContent=request.runAllConfigRows==="true"?"Existing report tabs to replace in this batch:":"Existing report tabs to replace:";cleanup.appendChild(h);if(onlyConfigTab){const p=document.createElement("p");p.textContent="Only the Config tab is present. No report tabs need replacement.";cleanup.appendChild(p)}else if(!tabs.length){const p=document.createElement("p");p.textContent="No existing report tabs need replacement.";cleanup.appendChild(p)}else{const ul=document.createElement("ul");tabs.forEach(name=>{const li=document.createElement("li");li.textContent=name;ul.appendChild(li)});cleanup.appendChild(ul)}' +
-    'const status=document.getElementById("status");document.getElementById("error").textContent=pageError;let downloaded=false;function downloadWorkbook(){if(downloaded)return;downloaded=true;status.textContent="Report complete. Downloading the workbook…";window.location.href="https://docs.google.com/spreadsheets/d/"+encodeURIComponent(request.spreadsheetId)+"/export?format=xlsx"}function pollRun(){google.script.run.withSuccessHandler(result=>{if(result.status==="completed"){status.textContent=result.message||"Report complete.";downloadWorkbook()}else if(result.status==="failed"){status.textContent="Stopped: "+(result.message||"The report failed.")}else{status.textContent=result.message||"Report is running…";setTimeout(pollRun,5000)}}).withFailureHandler(error=>{status.textContent="Checking status…";setTimeout(pollRun,10000)}).getChromeManagerRunStatus(request.runId)}function startRun(){status.textContent="Starting report…";google.script.run.withSuccessHandler(result=>{status.textContent=result.message||"Report started.";if(result.success)pollRun();else status.textContent="Stopped: "+(result.message||"The report did not start.")}).withFailureHandler(error=>{status.textContent="Stopped: "+(error.message||error)}).runSearchConsoleFromController(request)}if(!pageError)startRun()</script></body></html>';
+    'const status=document.getElementById("status");document.getElementById("error").textContent=pageError;' +
+    'function closeCompletedTab(){window.close();setTimeout(function(){if(!window.closed){status.textContent="Chrome blocked auto-close. Opening the spreadsheet…";window.location.replace("https://docs.google.com/spreadsheets/d/"+encodeURIComponent(request.spreadsheetId)+"/edit")}},300)}' +
+    'function pollRun(){google.script.run.withSuccessHandler(result=>{if(result.status==="completed"){status.textContent=(result.message||"Report complete.")+" Closing this tab…";setTimeout(closeCompletedTab,1200)}else if(result.status==="failed"){status.textContent="Stopped: "+(result.message||"The report failed.")}else{status.textContent=result.message||"Report is running…";setTimeout(pollRun,5000)}}).withFailureHandler(error=>{status.textContent="Checking status…";setTimeout(pollRun,10000)}).chromeManagerGetRunStatus(request.runId)}' +
+    'function startRun(){status.textContent="Starting report…";google.script.run.withSuccessHandler(result=>{status.textContent=result.message||"Report started.";if(result.success)pollRun();else status.textContent="Stopped: "+(result.message||"The report did not start.")}).withFailureHandler(error=>{status.textContent="Stopped: "+(error.message||error)}).runSearchConsoleFromController(request)}if(!pageError)startRun()</script></body></html>';
 }

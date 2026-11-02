@@ -60,6 +60,7 @@ function startReportDownloadOrganization({ clientName, projectName, profileDir }
     app.getPath('downloads'),
     'Search Console Reports',
     localDateFolderName(),
+    'Project',
     safeFolderName(clientName),
     safeFolderName(projectName)
   );
