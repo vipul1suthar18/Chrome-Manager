@@ -54,10 +54,10 @@ function doGet(e) {
         if (!configs.length) throw new Error('No report rows found in the Config tab.');
         configs.forEach(function (config) { validateConfig(config); });
         request.configRowCount = configs.length;
-        tabsToReplace = ss.getSheets().filter(function (sheet) {
-          return sheet.getName() !== CHROME_MANAGER_CONFIG_SHEET;
-        }).map(function (sheet) {
-          return sheet.getName();
+        configs.forEach(function (config) {
+          chromeManagerTabsToReplace_(ss, config).forEach(function (sheet) {
+            if (tabsToReplace.indexOf(sheet.getName()) === -1) tabsToReplace.push(sheet.getName());
+          });
         });
       } else {
         var config = chromeManagerBuildConfig_(request);
@@ -117,7 +117,6 @@ function runSearchConsoleFromController(rawRequest) {
         if (!configs.length) return { success: false, message: 'No report rows found in the Config tab.' };
         configs.forEach(function (config) { validateConfig(config); });
 
-        removeAllReportTabsExceptConfig_(ss);
         state = buildInitialJobState_(configs[0], ss);
         state.configRowNumber = configs[0].rowNumber || 2;
         state.chromeManagerRunId = request.runId;
@@ -254,6 +253,6 @@ function chromeManagerConfirmationPage_(request, tabsToReplace, pageMessage, onl
     '<p id="error" class="error"></p><span id="status" class="muted"></span>' +
     '<script>const request=' + requestJson + ';const tabs=' + tabsJson + ';const pageError=' + messageJson + ';const onlyConfigTab=' + onlyConfigJson + ';' +
     'const summary=document.getElementById("summary");if(request.runAllConfigRows==="true"){const p=document.createElement("p");p.textContent="Config rows to run: "+(request.configRowCount||0);summary.appendChild(p)}else{["propertyUrl","startDate","endDate","dimension","searchType","country","outputMode","sheetName"].forEach(k=>{const p=document.createElement("p");p.textContent=k+": "+(request[k]||"(blank)");summary.appendChild(p)})}' +
-    'const cleanup=document.getElementById("cleanup");const h=document.createElement("strong");h.textContent=request.runAllConfigRows==="true"?"Tabs to delete before batch (Config is kept):":"Existing report tabs to replace:";cleanup.appendChild(h);if(onlyConfigTab){const p=document.createElement("p");p.textContent="Only the Config tab is present. No tabs need deletion.";cleanup.appendChild(p)}else if(!tabs.length){const p=document.createElement("p");p.textContent=request.runAllConfigRows==="true"?"No other tabs are present.":"No existing report tabs need replacement.";cleanup.appendChild(p)}else{const ul=document.createElement("ul");tabs.forEach(name=>{const li=document.createElement("li");li.textContent=name;ul.appendChild(li)});cleanup.appendChild(ul);if(request.runAllConfigRows==="true"){const warning=document.createElement("p");warning.className="warning";warning.textContent="These tabs will be permanently deleted before the Config rows run.";cleanup.appendChild(warning)}}' +
+    'const cleanup=document.getElementById("cleanup");const h=document.createElement("strong");h.textContent=request.runAllConfigRows==="true"?"Existing report tabs to replace in this batch:":"Existing report tabs to replace:";cleanup.appendChild(h);if(onlyConfigTab){const p=document.createElement("p");p.textContent="Only the Config tab is present. No report tabs need replacement.";cleanup.appendChild(p)}else if(!tabs.length){const p=document.createElement("p");p.textContent="No existing report tabs need replacement.";cleanup.appendChild(p)}else{const ul=document.createElement("ul");tabs.forEach(name=>{const li=document.createElement("li");li.textContent=name;ul.appendChild(li)});cleanup.appendChild(ul)}' +
     'const status=document.getElementById("status");document.getElementById("error").textContent=pageError;let downloaded=false;function downloadWorkbook(){if(downloaded)return;downloaded=true;status.textContent="Report complete. Downloading the workbook…";window.location.href="https://docs.google.com/spreadsheets/d/"+encodeURIComponent(request.spreadsheetId)+"/export?format=xlsx"}function pollRun(){google.script.run.withSuccessHandler(result=>{if(result.status==="completed"){status.textContent=result.message||"Report complete.";downloadWorkbook()}else if(result.status==="failed"){status.textContent="Stopped: "+(result.message||"The report failed.")}else{status.textContent=result.message||"Report is running…";setTimeout(pollRun,5000)}}).withFailureHandler(error=>{status.textContent="Checking status…";setTimeout(pollRun,10000)}).getChromeManagerRunStatus(request.runId)}function startRun(){status.textContent="Starting report…";google.script.run.withSuccessHandler(result=>{status.textContent=result.message||"Report started.";if(result.success)pollRun();else status.textContent="Stopped: "+(result.message||"The report did not start.")}).withFailureHandler(error=>{status.textContent="Stopped: "+(error.message||error)}).runSearchConsoleFromController(request)}if(!pageError)startRun()</script></body></html>';
 }

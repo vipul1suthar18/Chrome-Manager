@@ -412,19 +412,6 @@ function formatBatchSummary_(stats) {
     reportLines.join('\n') + '\n\nTotal rows written: ' + stats.rowsWritten + '.';
 }
 
-/** Deletes every report tab before a Config-row batch, preserving Config. */
-function removeAllReportTabsExceptConfig_(ss) {
-  var configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
-  if (!configSheet) throw new Error('Cannot start the batch because the Config tab is missing.');
-
-  var configSheetId = configSheet.getSheetId();
-  ss.getSheets().forEach(function (sheet) {
-    if (sheet.getSheetId() !== configSheetId) ss.deleteSheet(sheet);
-  });
-  ss.setActiveSheet(configSheet);
-  ss.moveActiveSheet(1);
-}
-
 /** Stores report status so the Chrome Manager tab can download on completion. */
 function setChromeManagerRunStatus_(runId, status, message) {
   if (!runId) return;

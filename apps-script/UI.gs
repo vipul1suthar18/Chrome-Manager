@@ -64,9 +64,6 @@ function onFetchDataClick() {
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-    ss.toast('Clearing report tabs before the batch...', 'Search Console', -1);
-    removeAllReportTabsExceptConfig_(ss);
-
     ss.toast('Fetching report 1 of ' + configs.length + '...', 'Search Console', -1);
     var state = buildInitialJobState_(configs[0], ss);
     state.configRowNumber = configs[0].rowNumber || 2;
@@ -224,7 +221,7 @@ function onHelpClick() {
     '<ol>' +
     '<li>Run <b>Search Console &gt; List Properties</b> once to load a property dropdown into the Config sheet.</li>' +
     '<li>Fill one report per row on the <b>Config</b> sheet, starting at row 2. Empty rows are skipped.</li>' +
-    '<li>Run <b>Search Console &gt; Fetch Data (all Config rows)</b>. Filled rows run in order, and existing tabs are kept when Output Mode is New Sheet.</li>' +
+    '<li>Run <b>Search Console &gt; Fetch Data (all Config rows)</b>. Filled rows run in order. New Sheet keeps existing tabs; Replace Existing replaces the named tab.</li>' +
     '</ol>' +
     '<h4>Dimension</h4>' +
     '<p><code>query</code>, <code>page</code>, or <code>query+page</code> for a combined export (one row per unique query/page pair, like GSC\'s own combined view).</p>' +
