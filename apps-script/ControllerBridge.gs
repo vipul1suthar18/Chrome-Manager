@@ -47,9 +47,21 @@ function doGet(e) {
     pageMessage = 'The spreadsheet ID does not match the spreadsheet authorized for this Apps Script project.';
   } else if (!pageMessage) {
     try {
-      var config = chromeManagerBuildConfig_(request);
       var ss = SpreadsheetApp.openById(authorizedId);
-      tabsToReplace = chromeManagerTabsToReplace_(ss, config).map(function (sheet) { return sheet.getName(); });
+      if (request.runAllConfigRows === 'true') {
+        var configs = getConfigs(ss);
+        if (!configs.length) throw new Error('No report rows found in the Config tab.');
+        configs.forEach(function (config) { validateConfig(config); });
+        request.configRowCount = configs.length;
+        configs.forEach(function (config) {
+          chromeManagerTabsToReplace_(ss, config).forEach(function (sheet) {
+            if (tabsToReplace.indexOf(sheet.getName()) === -1) tabsToReplace.push(sheet.getName());
+          });
+        });
+      } else {
+        var config = chromeManagerBuildConfig_(request);
+        tabsToReplace = chromeManagerTabsToReplace_(ss, config).map(function (sheet) { return sheet.getName(); });
+      }
       var existingSheets = ss.getSheets();
       onlyConfigTab = existingSheets.length === 1 && existingSheets[0].getName() === CHROME_MANAGER_CONFIG_SHEET;
     } catch (error) {
@@ -76,11 +88,13 @@ function runSearchConsoleFromController(rawRequest) {
       return { success: false, message: 'This script is not authorized for the requested spreadsheet. No changes were made.' };
     }
 
-    var config;
-    try {
-      config = chromeManagerBuildConfig_(request);
-    } catch (validationError) {
-      return { success: false, message: validationError.message || String(validationError) };
+    var config = null;
+    if (request.runAllConfigRows !== 'true') {
+      try {
+        config = chromeManagerBuildConfig_(request);
+      } catch (validationError) {
+        return { success: false, message: validationError.message || String(validationError) };
+      }
     }
 
     if (loadJobState_()) {
@@ -95,35 +109,58 @@ function runSearchConsoleFromController(rawRequest) {
     }
 
     try {
-      var configSheet = chromeManagerEnsureConfigSheet_(ss);
-      var tabsToReplace = chromeManagerTabsToReplace_(ss, config);
-      tabsToReplace.forEach(function (sheet) {
-        // Config is excluded by chromeManagerTabsToReplace_().
-        ss.deleteSheet(sheet);
-      });
+      var state;
+      if (request.runAllConfigRows === 'true') {
+        var configs = getConfigs(ss);
+        if (!configs.length) return { success: false, message: 'No report rows found in the Config tab.' };
+        configs.forEach(function (config) { validateConfig(config); });
 
-      // The existing exporter supports both modes. Values are validated above;
-      // Replace Existing clears its target, so the user is asked to download
-      // a copy before confirming this run.
-      configSheet.getRange(2, 1, 1, CONFIG_HEADERS.length).setValues([[
-        config.propertyUrl,
-        formatDateForApi(config.startDate),
-        formatDateForApi(config.endDate),
-        config.dimension,
-        config.searchType,
-        config.countryRaw || ALL_COUNTRIES_LABEL,
-        config.outputMode,
-        config.sheetName
-      ]]);
+        state = buildInitialJobState_(configs[0], ss);
+        state.configRowNumber = configs[0].rowNumber || 2;
+        state.batchQueue = configs.slice(1).map(serializeConfigForQueue_);
+        state.batchStats = { total: configs.length, completed: 0, rowsWritten: 0, reports: [] };
+      } else {
+        var configSheet = chromeManagerEnsureConfigSheet_(ss);
+        var tabsToReplace = chromeManagerTabsToReplace_(ss, config);
+        tabsToReplace.forEach(function (sheet) {
+          // Config is excluded by chromeManagerTabsToReplace_().
+          ss.deleteSheet(sheet);
+        });
 
-      var state = buildInitialJobState_(config, ss);
+        // Store this single app-configured report in row 2 for the existing exporter.
+        configSheet.getRange(2, 1, 1, CONFIG_HEADERS.length).setValues([[
+          config.propertyUrl,
+          formatDateForApi(config.startDate),
+          formatDateForApi(config.endDate),
+          config.dimension,
+          config.searchType,
+          config.countryRaw || ALL_COUNTRIES_LABEL,
+          config.outputMode,
+          config.sheetName
+        ]]);
+
+        state = buildInitialJobState_(config, ss);
+      }
+
       var result = runJobChunk_(state);
       if (result.done) {
+        var batch = advanceBatchState_(result.state || state, result);
+        if (batch.nextState) {
+          scheduleContinuation_(batch.nextState);
+          return {
+            success: true,
+            pending: true,
+            rowsWritten: batch.stats.rowsWritten,
+            message: 'Report 1 of ' + batch.stats.total + ' is complete. The remaining Config rows are queued in order.'
+          };
+        }
         clearJobState_();
         return {
           success: true,
-          rowsWritten: result.totalRowsWritten,
-          message: 'Search Console report completed. ' + result.totalRowsWritten + ' rows were written.'
+          rowsWritten: batch.stats ? batch.stats.rowsWritten : result.totalRowsWritten,
+          message: batch.stats
+            ? 'Search Console batch completed. ' + batch.stats.completed + ' reports and ' + batch.stats.rowsWritten + ' rows were written.'
+            : 'Search Console report completed. ' + result.totalRowsWritten + ' rows were written.'
         };
       }
 
@@ -132,7 +169,9 @@ function runSearchConsoleFromController(rawRequest) {
         success: true,
         pending: true,
         rowsWritten: result.totalRowsWritten,
-        message: 'The export is continuing in the background. ' + result.totalRowsWritten + ' rows were written in the first run.'
+        message: request.runAllConfigRows === 'true'
+          ? 'Report 1 of ' + state.batchStats.total + ' is continuing in the background; the remaining Config rows will run in order.'
+          : 'The export is continuing in the background. ' + result.totalRowsWritten + ' rows were written in the first run.'
       };
     } catch (runError) {
       return {
@@ -147,7 +186,7 @@ function runSearchConsoleFromController(rawRequest) {
 
 function chromeManagerRequestFromParams_(params) {
   var request = {};
-  ['spreadsheetId', 'propertyUrl', 'startDate', 'endDate', 'dimension', 'searchType', 'country', 'outputMode', 'sheetName'].forEach(function (key) {
+  ['spreadsheetId', 'propertyUrl', 'startDate', 'endDate', 'dimension', 'searchType', 'country', 'outputMode', 'sheetName', 'runAllConfigRows'].forEach(function (key) {
     request[key] = (params[key] == null ? '' : String(params[key])).trim();
   });
   return request;
@@ -206,7 +245,7 @@ function chromeManagerConfirmationPage_(request, tabsToReplace, pageMessage, onl
     '<div class="card"><div id="summary"></div><div id="cleanup"></div></div>' +
     '<p id="error" class="error"></p><span id="status" class="muted"></span>' +
     '<script>const request=' + requestJson + ';const tabs=' + tabsJson + ';const pageError=' + messageJson + ';const onlyConfigTab=' + onlyConfigJson + ';' +
-    'const summary=document.getElementById("summary");["propertyUrl","startDate","endDate","dimension","searchType","country","outputMode","sheetName"].forEach(k=>{const p=document.createElement("p");p.textContent=k+": "+(request[k]||"(blank)");summary.appendChild(p)});' +
-    'const cleanup=document.getElementById("cleanup");const h=document.createElement("strong");h.textContent="Existing report tab to replace:";cleanup.appendChild(h);if(onlyConfigTab){const p=document.createElement("p");p.textContent="Only the Config tab is present. No report tabs need replacement.";cleanup.appendChild(p)}else if(!tabs.length){const p=document.createElement("p");p.textContent="No existing report tab needs replacement.";cleanup.appendChild(p)}else{const ul=document.createElement("ul");tabs.forEach(name=>{const li=document.createElement("li");li.textContent=name;ul.appendChild(li)});cleanup.appendChild(ul)}' +
+    'const summary=document.getElementById("summary");if(request.runAllConfigRows==="true"){const p=document.createElement("p");p.textContent="Config rows to run: "+(request.configRowCount||0);summary.appendChild(p)}else{["propertyUrl","startDate","endDate","dimension","searchType","country","outputMode","sheetName"].forEach(k=>{const p=document.createElement("p");p.textContent=k+": "+(request[k]||"(blank)");summary.appendChild(p)})}' +
+    'const cleanup=document.getElementById("cleanup");const h=document.createElement("strong");h.textContent="Existing report tabs to replace:";cleanup.appendChild(h);if(onlyConfigTab){const p=document.createElement("p");p.textContent="Only the Config tab is present. No report tabs need replacement.";cleanup.appendChild(p)}else if(!tabs.length){const p=document.createElement("p");p.textContent="No existing report tabs need replacement.";cleanup.appendChild(p)}else{const ul=document.createElement("ul");tabs.forEach(name=>{const li=document.createElement("li");li.textContent=name;ul.appendChild(li)});cleanup.appendChild(ul)}' +
     'const status=document.getElementById("status");document.getElementById("error").textContent=pageError;function startRun(){status.textContent="Running report…";google.script.run.withSuccessHandler(result=>{status.textContent=result.message||"Finished."}).withFailureHandler(error=>{status.textContent="Stopped: "+(error.message||error)}).runSearchConsoleFromController(request)}if(!pageError)startRun()</script></body></html>';
 }

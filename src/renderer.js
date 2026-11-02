@@ -400,8 +400,11 @@ function setupEventListeners() {
         }
         const runButton = event.target.closest('.reporting-run');
         if (runButton) runReportingWorkflow(runButton);
+        const configRowsButton = event.target.closest('.reporting-run-config');
+        if (configRowsButton) runReportingWorkflow(configRowsButton, { runAllConfigRows: true });
     });
-    document.getElementById('search-console-run-all').addEventListener('click', runAllSearchConsole);
+    document.getElementById('search-console-run-all').addEventListener('click', () => runAllSearchConsole());
+    document.getElementById('search-console-run-all-config').addEventListener('click', () => runAllSearchConsole({ runAllConfigRows: true }));
     document.getElementById('search-console-apply-master').addEventListener('click', applySearchConsoleMasterSettings);
     document.getElementById('add-client-btn').addEventListener('click', () => openClientModal());
     document.getElementById('add-project-btn').addEventListener('click', () => openProjectModal());
@@ -699,7 +702,7 @@ function renderReportingSection(type) {
             reportingInput('outputMode', settings.outputMode, `${project.name} Output Mode`),
             reportingInput('sheetName', settings.sheetName, `${project.name} Sheet Name`)
         ];
-        return `<tr data-client-id="${escapeHtml(client.id)}" data-project-id="${escapeHtml(project.id)}"><td>${projectCell}</td>${inputs.map(input => `<td>${input}</td>`).join('')}<td><button type="button" class="reporting-run bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg font-semibold text-xs transition-colors whitespace-nowrap" data-workflow="searchConsole">Run</button></td></tr>`;
+        return `<tr data-client-id="${escapeHtml(client.id)}" data-project-id="${escapeHtml(project.id)}"><td>${projectCell}</td>${inputs.map(input => `<td>${input}</td>`).join('')}<td><div class="flex flex-col gap-1.5"><button type="button" class="reporting-run bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg font-semibold text-xs transition-colors whitespace-nowrap" data-workflow="searchConsole">Run</button><button type="button" class="reporting-run-config bg-slate-600 hover:bg-slate-500 text-white px-3 py-2 rounded-lg font-semibold text-xs transition-colors whitespace-nowrap" data-workflow="searchConsole" title="Run every filled row in this project's Config tab">Run Config rows</button></div></td></tr>`;
     }).join('');
     emptyState.classList.toggle('hidden', rows.length > 0);
     tbody.closest('table').classList.toggle('hidden', rows.length === 0);
@@ -942,20 +945,25 @@ async function saveSearchConsoleConnection(event) {
     }
 }
 
-async function runAllSearchConsole() {
+async function runAllSearchConsole({ runAllConfigRows = false } = {}) {
     if (isRunningSearchConsoleAll) return;
     const rows = [...document.querySelectorAll('#search-console-rows tr[data-project-id]')];
     const status = reportingStatus('searchConsole');
-    const runAllButton = document.getElementById('search-console-run-all');
+    const runAllButtons = [
+        document.getElementById('search-console-run-all'),
+        document.getElementById('search-console-run-all-config')
+    ];
     if (!rows.length) {
         status.textContent = 'There are no projects to run.';
         return;
     }
 
     isRunningSearchConsoleAll = true;
-    runAllButton.disabled = true;
-    runAllButton.classList.add('opacity-60', 'cursor-not-allowed');
-    const runButtons = [...document.querySelectorAll('.reporting-run[data-workflow="searchConsole"]')];
+    runAllButtons.forEach(button => {
+        button.disabled = true;
+        button.classList.add('opacity-60', 'cursor-not-allowed');
+    });
+    const runButtons = [...document.querySelectorAll('.reporting-run[data-workflow="searchConsole"], .reporting-run-config[data-workflow="searchConsole"]')];
     runButtons.forEach(runButton => {
         runButton.disabled = true;
         runButton.classList.add('opacity-60', 'cursor-not-allowed');
@@ -969,19 +977,22 @@ async function runAllSearchConsole() {
             const project = appData.clients
                 .find(client => client.id === row.dataset.clientId)
                 ?.projects.find(item => item.id === row.dataset.projectId);
-            status.textContent = `Starting ${index + 1} of ${rows.length}${project ? ` · ${project.name}` : ''}…`;
-            const button = row.querySelector('.reporting-run');
-            const result = await runReportingWorkflow(button, { fromRunAll: true });
+            status.textContent = `Starting ${runAllConfigRows ? 'Config batch ' : ''}${index + 1} of ${rows.length}${project ? ` · ${project.name}` : ''}…`;
+            const button = row.querySelector(runAllConfigRows ? '.reporting-run-config' : '.reporting-run');
+            const result = await runReportingWorkflow(button, { fromRunAll: true, runAllConfigRows });
             if (result.success) started++;
             else failures.push(`${project?.name || 'Unknown project'}: ${result.message}`);
         }
+        const actionName = runAllConfigRows ? 'Config-row batches' : 'Search Console';
         status.textContent = failures.length
-            ? `Started ${started} of ${rows.length}. Could not start: ${failures.join('; ')}`
-            : `Started Search Console for all ${started} projects.`;
+            ? `Started ${started} of ${rows.length} ${actionName}. Could not start: ${failures.join('; ')}`
+            : `Started ${actionName} for all ${started} projects.`;
     } finally {
         isRunningSearchConsoleAll = false;
-        runAllButton.disabled = false;
-        runAllButton.classList.remove('opacity-60', 'cursor-not-allowed');
+        runAllButtons.forEach(button => {
+            button.disabled = false;
+            button.classList.remove('opacity-60', 'cursor-not-allowed');
+        });
         runButtons.forEach(runButton => {
             runButton.disabled = false;
             runButton.classList.remove('opacity-60', 'cursor-not-allowed');
@@ -989,7 +1000,7 @@ async function runAllSearchConsole() {
     }
 }
 
-async function runReportingWorkflow(button, { fromRunAll = false } = {}) {
+async function runReportingWorkflow(button, { fromRunAll = false, runAllConfigRows = false } = {}) {
     if (!button || (isRunningSearchConsoleAll && !fromRunAll)) return { success: false, message: 'Run all is in progress.' };
     const row = button.closest('tr');
     const type = button.dataset.workflow;
@@ -998,12 +1009,12 @@ async function runReportingWorkflow(button, { fromRunAll = false } = {}) {
     if (!client || !project) return { success: false, message: 'Project not found.' };
 
     const status = reportingStatus(type);
-    const runButtons = [...document.querySelectorAll(`.reporting-run[data-workflow="${type}"]`)];
+    const runButtons = [...document.querySelectorAll(`.reporting-run[data-workflow="${type}"], .reporting-run-config[data-workflow="${type}"]`)];
     if (!fromRunAll) runButtons.forEach(runButton => {
         runButton.disabled = true;
         runButton.classList.add('opacity-60', 'cursor-not-allowed');
     });
-    status.textContent = 'Preparing…';
+    status.textContent = runAllConfigRows ? `Preparing Config rows for ${project.name}…` : 'Preparing…';
     try {
         if (type === 'searchConsole') {
             const workflow = window.reportingWorkflows.searchConsole;
@@ -1011,14 +1022,17 @@ async function runReportingWorkflow(button, { fromRunAll = false } = {}) {
             const url = workflow.createLaunchUrl({
                 scriptUrl: settings.scriptUrl,
                 spreadsheetId: workflow.getSpreadsheetId(project),
-                settings
+                settings,
+                runAllConfigRows
             });
             const result = await window.electronAPI.launchUrlWithProfile({
                 url,
                 profileDir: client.chromeProfile?.directory || 'Default'
             });
             if (!result?.success) throw new Error(result?.error || 'Unable to open the client Apps Script.');
-            status.textContent = `Search Console run started for ${project.name}.`;
+            status.textContent = runAllConfigRows
+                ? `Search Console Config-row batch started for ${project.name}.`
+                : `Search Console run started for ${project.name}.`;
             return { success: true };
         }
         throw new Error('Unknown reporting workflow.');

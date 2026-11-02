@@ -33,7 +33,7 @@
             fields: searchConsoleFields,
             getSettings,
             getSpreadsheetId,
-            createLaunchUrl({ scriptUrl, spreadsheetId, settings }) {
+            createLaunchUrl({ scriptUrl, spreadsheetId, settings, runAllConfigRows = false }) {
                 let url;
                 try {
                     url = new URL(scriptUrl);
@@ -45,17 +45,22 @@
                 }
                 if (!spreadsheetId) throw new Error('Add the Google Sheets spreadsheet ID first.');
 
-                const request = {
-                    spreadsheetId,
-                    propertyUrl: settings.propertyUrl,
-                    startDate: settings.startDate,
-                    endDate: settings.endDate,
-                    dimension: settings.dimension,
-                    searchType: settings.searchType,
-                    country: settings.country,
-                    outputMode: settings.outputMode,
-                    sheetName: settings.sheetName
-                };
+                const request = { spreadsheetId, runAllConfigRows: runAllConfigRows ? 'true' : 'false' };
+                // Leave single-run fields blank for batch mode. Older deployed
+                // bridges then fail validation safely instead of accidentally
+                // running the app's single-row settings as a batch request.
+                if (!runAllConfigRows) {
+                    Object.assign(request, {
+                        propertyUrl: settings.propertyUrl,
+                        startDate: settings.startDate,
+                        endDate: settings.endDate,
+                        dimension: settings.dimension,
+                        searchType: settings.searchType,
+                        country: settings.country,
+                        outputMode: settings.outputMode,
+                        sheetName: settings.sheetName
+                    });
+                }
                 Object.entries(request).forEach(([key, value]) => url.searchParams.set(key, value || ''));
                 return url.toString();
             },

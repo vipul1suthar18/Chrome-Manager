@@ -16,4 +16,4 @@ The bridge preserves all existing tabs when the output mode is `New Sheet`, so s
 
 The existing Apps Script `Replace Existing` mode clears its target sheet. Make any desired manual copy before clicking **Run**. Search Console cleanup only applies to Search Console; Analytics keeps its own separate no-deletion process.
 
-Use Chrome Manager's **Run** to start a single report from the app. To run multiple rows, use the in-sheet **Search Console → Fetch Data (all Config rows)** menu; it processes filled Config rows one at a time.
+In Chrome Manager, **Run** starts the settings shown in the app; **Run Config rows** reads and runs every filled row from that project's Config tab. The Search Console page also has **Run all Config rows** to start a batch for every listed project. In the spreadsheet, **Search Console → Fetch Data (all Config rows)** runs that spreadsheet's filled rows sequentially. The Chrome Manager batch option requires the updated Apps Script web app deployment.

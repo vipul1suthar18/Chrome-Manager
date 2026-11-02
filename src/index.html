@@ -346,8 +346,9 @@
                             <h3 class="theme-text font-semibold">Master report settings</h3>
                             <p class="muted-text text-xs mt-1">Set these once, then apply the dates and sheet name to every project.</p>
                         </div>
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 flex-wrap">
                             <button id="search-console-run-all" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-semibold text-sm transition-colors whitespace-nowrap" type="button"><i class="fas fa-play mr-2 text-xs"></i>Run all</button>
+                            <button id="search-console-run-all-config" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-semibold text-sm transition-colors whitespace-nowrap" type="button"><i class="fas fa-list-check mr-2 text-xs"></i>Run all Config rows</button>
                             <button id="search-console-apply-master" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-semibold text-sm transition-colors whitespace-nowrap" type="button">Apply to all projects</button>
                         </div>
                     </div>
@@ -367,13 +368,13 @@
                 <div class="surface-card rounded-2xl overflow-hidden">
                     <div class="overflow-x-auto">
                         <table class="reporting-table w-full" data-reporting-type="searchConsole">
-                            <thead><tr><th>Project</th><th>Property URL</th><th>Start Date</th><th>End Date</th><th>Dimension</th><th>Search Type</th><th>Country</th><th>Output Mode</th><th>Sheet Name</th><th>Run</th></tr></thead>
+                            <thead><tr><th>Project</th><th>Property URL</th><th>Start Date</th><th>End Date</th><th>Dimension</th><th>Search Type</th><th>Country</th><th>Output Mode</th><th>Sheet Name</th><th>Actions</th></tr></thead>
                             <tbody id="search-console-rows"></tbody>
                         </table>
                     </div>
                     <div id="search-console-empty" class="hidden p-10 text-center muted-text text-sm">Add a project to a client to configure Search Console reporting.</div>
                 </div>
-                <p class="muted-text text-xs mt-3">Each run uses the client’s Chrome profile and starts the connected Apps Script automatically. Download a spreadsheet copy manually before running if you want a backup.</p>
+                <p class="muted-text text-xs mt-3">Run uses the settings shown here. Run Config rows reads every filled row from that project’s Config tab and requires the updated Apps Script bridge deployment. Each run uses the client’s Chrome profile.</p>
             </div>
             <div id="analytics-panel" class="hidden">
                 <div class="flex items-start justify-between gap-4 flex-wrap mb-4">

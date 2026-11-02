@@ -412,8 +412,11 @@ function getConfig() {
  * populated row. Empty spacer rows are ignored.
  * @return {Array<Object>} report configurations
  */
-function getConfigs() {
-  var sheet = ensureConfigSheet();
+function getConfigs(spreadsheet) {
+  var sheet = spreadsheet
+    ? spreadsheet.getSheetByName(CONFIG_SHEET_NAME)
+    : ensureConfigSheet();
+  if (!sheet) throw new Error('The spreadsheet does not have a Config tab.');
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
