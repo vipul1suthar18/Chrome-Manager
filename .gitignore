@@ -4,3 +4,10 @@ node_modules/
 !.env.example
 *.log
 .DS_Store
+
+# Local app records and build output
+data.json
+data.json.*
+*.tmp
+dist/
+release/

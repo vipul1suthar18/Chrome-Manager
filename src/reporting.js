@@ -33,19 +33,19 @@
             fields: searchConsoleFields,
             getSettings,
             getSpreadsheetId,
-            createLaunchUrl({ scriptUrl, spreadsheetId, settings, runAllConfigRows = false, runId = '', clientName = '', projectName = '' }) {
+            createLaunchUrl({ scriptUrl, spreadsheetId, settings, runAllConfigRows = false, runId = '' }) {
                 let url;
                 try {
                     url = new URL(scriptUrl);
                 } catch {
                     throw new Error('Enter the deployed Apps Script web app URL.');
                 }
-                if (url.protocol !== 'https:' || url.hostname !== 'script.google.com' || !/^\/macros\/s\/[^/]+\/exec\/?$/.test(url.pathname)) {
+                if (url.protocol !== 'https:' || url.hostname !== 'script.google.com' || url.port || url.search || url.hash || !/^\/macros\/s\/[^/]+\/exec\/?$/.test(url.pathname)) {
                     throw new Error('Use a deployed Apps Script URL ending in /macros/s/…/exec.');
                 }
                 if (!spreadsheetId) throw new Error('Add the Google Sheets spreadsheet ID first.');
 
-                const request = { spreadsheetId, runAllConfigRows: runAllConfigRows ? 'true' : 'false', runId, clientName, projectName };
+                const request = { spreadsheetId, runAllConfigRows: runAllConfigRows ? 'true' : 'false', runId };
                 // Leave single-run fields blank for batch mode. Older deployed
                 // bridges then fail validation safely instead of accidentally
                 // running the app's single-row settings as a batch request.

@@ -27,8 +27,23 @@ const projectForm = document.getElementById('project-form');
 
 // Initialize
 async function init() {
-    appData = await window.electronAPI.getData();
-    chromeProfiles = await window.electronAPI.getChromeProfiles();
+    try {
+        appData = await window.electronAPI.getData();
+        chromeProfiles = await window.electronAPI.getChromeProfiles();
+    } catch (error) {
+        document.body.replaceChildren();
+        const message = document.createElement('main');
+        message.className = 'p-8';
+        const heading = document.createElement('h1');
+        heading.className = 'text-xl font-bold';
+        heading.textContent = 'SEO Workspace could not open its saved data';
+        const detail = document.createElement('p');
+        detail.className = 'mt-3';
+        detail.textContent = error.message || 'Saved data is unavailable. It has not been changed.';
+        message.append(heading, detail);
+        document.body.appendChild(message);
+        return;
+    }
     applyTheme(localStorage.getItem('seo-workspace-theme') || 'light');
 
     // Migrating old data if structures mismatch
@@ -97,16 +112,6 @@ function escapeHtml(value) {
     })[char]);
 }
 
-function getFaviconUrl(resourceUrl) {
-    try {
-        const url = new URL(resourceUrl);
-        if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
-        return `${url.origin}/favicon.ico`;
-    } catch {
-        return '';
-    }
-}
-
 function renderProjectResources(resources) {
     document.getElementById('project-resources-list').innerHTML = resources.map((resource, index) => `
         <div class="resource-form-row subtle-surface p-4 rounded-xl border">
@@ -147,18 +152,18 @@ function renderClients() {
             <div class="client-card-content">
                 <div class="client-card-details min-w-0">
                     <div class="flex items-center justify-between gap-2">
-                        <h3 class="theme-text text-base font-bold leading-tight truncate">${client.name}</h3>
+                        <h3 class="theme-text text-base font-bold leading-tight truncate">${escapeHtml(client.name)}</h3>
                     </div>
                     <p class="muted-text text-sm mt-1">${client.projects.length} ${client.projects.length === 1 ? 'project' : 'projects'}</p>
-                    ${client.email ? `<p class="muted-text text-xs mt-1 truncate">${client.email}</p>` : ''}
+                    ${client.email ? `<p class="muted-text text-xs mt-1 truncate">${escapeHtml(client.email)}</p>` : ''}
                     <div class="flex items-center gap-2 mt-2">
                         <i class="fab fa-chrome text-blue-600" aria-hidden="true"></i>
-                        <span class="text-xs px-2 py-1 rounded-lg truncate max-w-[160px]" style="color: var(--text-secondary); background: var(--surface-muted);">${client.chromeProfile?.name || 'Default'}</span>
+                        <span class="text-xs px-2 py-1 rounded-lg truncate max-w-[160px]" style="color: var(--text-secondary); background: var(--surface-muted);">${escapeHtml(client.chromeProfile?.name || 'Default')}</span>
                     </div>
                 </div>
                 <div class="client-card-actions flex gap-1 self-start">
-                    <button type="button" class="edit-client icon-button !w-8 !h-8 !border-0 !bg-transparent" data-id="${client.id}" title="Edit client" aria-label="Edit ${client.name}"><i class="fas fa-pen text-xs"></i></button>
-                    <button type="button" class="delete-client icon-button !w-8 !h-8 !border-0 !bg-transparent hover:!text-red-500" data-id="${client.id}" title="Delete client" aria-label="Delete ${client.name}"><i class="fas fa-trash text-xs"></i></button>
+                    <button type="button" class="edit-client icon-button !w-8 !h-8 !border-0 !bg-transparent" data-id="${escapeHtml(client.id)}" title="Edit client" aria-label="Edit ${escapeHtml(client.name)}"><i class="fas fa-pen text-xs"></i></button>
+                    <button type="button" class="delete-client icon-button !w-8 !h-8 !border-0 !bg-transparent hover:!text-red-500" data-id="${escapeHtml(client.id)}" title="Delete client" aria-label="Delete ${escapeHtml(client.name)}"><i class="fas fa-trash text-xs"></i></button>
                 </div>
             </div>
         `;
@@ -205,11 +210,9 @@ function renderProjects() {
         const visibleResources = project.resources.filter(res => !/^(analytics|ga4)$/i.test(res.name || ''));
         let resourceGrid = '';
         visibleResources.forEach((res, index) => {
-            const faviconUrl = getFaviconUrl(res.url);
             resourceGrid += `
                 <button type="button" class="link-btn resource-tile resource-${(index % 4) + 1} p-3 text-left flex flex-col items-center justify-center gap-2" data-url="${escapeHtml(res.url || '')}" title="Open ${escapeHtml(res.name || 'resource')}">
-                    ${faviconUrl ? `<img class="resource-favicon" src="${escapeHtml(faviconUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}
-                    <span class="resource-icon-fallback" ${faviconUrl ? 'hidden' : ''}><i class="fas fa-link text-lg" aria-hidden="true"></i></span>
+                    <span class="resource-icon-fallback"><i class="fas fa-link text-lg" aria-hidden="true"></i></span>
                     <span class="text-[11px] font-semibold truncate w-full text-center">${escapeHtml(res.name || 'Resource')}</span>
                 </button>
             `;
@@ -218,12 +221,12 @@ function renderProjects() {
         card.innerHTML = `
             <div class="flex justify-between items-start mb-6">
                 <div>
-                    <h3 class="theme-text text-base font-bold truncate">${project.name}</h3>
+                    <h3 class="theme-text text-base font-bold truncate">${escapeHtml(project.name)}</h3>
                     <p class="muted-text text-xs mt-1">${visibleResources.length} quick actions</p>
                 </div>
                 <div class="flex space-x-1">
-                    <button type="button" class="edit-project icon-button !w-8 !h-8 !border-0 !bg-transparent" data-id="${project.id}" title="Edit project" aria-label="Edit ${project.name}"><i class="fas fa-pen text-xs"></i></button>
-                    <button type="button" class="delete-project icon-button !w-8 !h-8 !border-0 !bg-transparent hover:!text-red-500" data-id="${project.id}" title="Delete project" aria-label="Delete ${project.name}"><i class="fas fa-trash text-xs"></i></button>
+                    <button type="button" class="edit-project icon-button !w-8 !h-8 !border-0 !bg-transparent" data-id="${escapeHtml(project.id)}" title="Edit project" aria-label="Edit ${escapeHtml(project.name)}"><i class="fas fa-pen text-xs"></i></button>
+                    <button type="button" class="delete-project icon-button !w-8 !h-8 !border-0 !bg-transparent hover:!text-red-500" data-id="${escapeHtml(project.id)}" title="Delete ${escapeHtml(project.name)}" aria-label="Delete ${escapeHtml(project.name)}"><i class="fas fa-trash text-xs"></i></button>
                 </div>
             </div>
             <div class="resource-grid grid gap-2 mb-4">
@@ -237,13 +240,6 @@ function renderProjects() {
         card.querySelectorAll('.link-btn').forEach(btn => {
             btn.addEventListener('click', () => launchUrl(btn.dataset.url));
         });
-        card.querySelectorAll('.resource-favicon').forEach(image => {
-            image.addEventListener('error', () => {
-                image.hidden = true;
-                image.nextElementSibling.hidden = false;
-            }, { once: true });
-        });
-
         // Launch all project resources
         card.querySelector('.open-all-btn').addEventListener('click', () => {
             visibleResources.forEach(res => {
@@ -263,10 +259,10 @@ function renderSettings() {
     list.innerHTML = chromeProfiles.map(p => `
         <div class="profile-row flex items-center justify-between p-4 border rounded-xl">
             <div>
-                <div class="font-bold theme-text">${p.name}</div>
-                <div class="text-xs muted-text">${p.directory}</div>
+                <div class="font-bold theme-text">${escapeHtml(p.name)}</div>
+                <div class="text-xs muted-text">${escapeHtml(p.directory)}</div>
             </div>
-            <button type="button" class="test-profile icon-button !w-auto !h-9 px-3 text-sm" data-dir="${p.directory}">Test</button>
+            <button type="button" class="test-profile icon-button !w-auto !h-9 px-3 text-sm" data-dir="${escapeHtml(p.directory)}">Test</button>
         </div>
     `).join('');
 
@@ -294,7 +290,7 @@ async function launchUrl(url) {
 // Modal Form Operations
 function openClientModal(id = null) {
     const profileInput = document.getElementById('client-profile-input');
-    profileInput.innerHTML = chromeProfiles.map(p => `<option value="${p.directory}" data-name="${p.name}">${p.name}</option>`).join('');
+    profileInput.innerHTML = chromeProfiles.map(p => `<option value="${escapeHtml(p.directory)}" data-name="${escapeHtml(p.name)}">${escapeHtml(p.name)}</option>`).join('');
 
     if (id) {
         const client = appData.clients.find(c => c.id === id);
@@ -1082,8 +1078,6 @@ async function runReportingWorkflow(button, { fromRunAll = false } = {}) {
                 spreadsheetId: workflow.getSpreadsheetId(project),
                 settings,
                 runId,
-                clientName: client.name,
-                projectName: project.name
             });
             const result = await window.electronAPI.launchUrlWithProfile({
                 url,
