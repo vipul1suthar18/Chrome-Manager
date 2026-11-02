@@ -33,7 +33,7 @@
             fields: searchConsoleFields,
             getSettings,
             getSpreadsheetId,
-            createLaunchUrl({ scriptUrl, spreadsheetId, settings, runAllConfigRows = false }) {
+            createLaunchUrl({ scriptUrl, spreadsheetId, settings, runAllConfigRows = false, runId = '', clientName = '', projectName = '' }) {
                 let url;
                 try {
                     url = new URL(scriptUrl);
@@ -45,7 +45,7 @@
                 }
                 if (!spreadsheetId) throw new Error('Add the Google Sheets spreadsheet ID first.');
 
-                const request = { spreadsheetId, runAllConfigRows: runAllConfigRows ? 'true' : 'false' };
+                const request = { spreadsheetId, runAllConfigRows: runAllConfigRows ? 'true' : 'false', runId, clientName, projectName };
                 // Leave single-run fields blank for batch mode. Older deployed
                 // bridges then fail validation safely instead of accidentally
                 // running the app's single-row settings as a batch request.

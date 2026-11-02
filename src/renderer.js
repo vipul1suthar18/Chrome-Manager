@@ -1015,28 +1015,42 @@ async function runReportingWorkflow(button, { fromRunAll = false, runAllConfigRo
         runButton.classList.add('opacity-60', 'cursor-not-allowed');
     });
     status.textContent = runAllConfigRows ? `Preparing Config rows for ${project.name}…` : 'Preparing…';
+    let downloadSessionId = '';
     try {
         if (type === 'searchConsole') {
             const workflow = window.reportingWorkflows.searchConsole;
             const settings = workflow.getSettings(project);
+            const runId = `cm-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
             const url = workflow.createLaunchUrl({
                 scriptUrl: settings.scriptUrl,
                 spreadsheetId: workflow.getSpreadsheetId(project),
                 settings,
-                runAllConfigRows
+                runAllConfigRows,
+                runId,
+                clientName: client.name,
+                projectName: project.name
             });
+            const download = await window.electronAPI.startReportDownloadOrganization({
+                clientName: client.name,
+                projectName: project.name,
+                profileDir: client.chromeProfile?.directory || 'Default'
+            });
+            if (!download?.success) throw new Error(download?.error || 'Could not prepare the local project folder.');
+            downloadSessionId = download.id;
             const result = await window.electronAPI.launchUrlWithProfile({
                 url,
                 profileDir: client.chromeProfile?.directory || 'Default'
             });
             if (!result?.success) throw new Error(result?.error || 'Unable to open the client Apps Script.');
             status.textContent = runAllConfigRows
-                ? `Search Console Config-row batch started for ${project.name}.`
-                : `Search Console run started for ${project.name}.`;
+                ? `Search Console Config-row batch started for ${project.name}. The finished workbook will be saved to ${download.destinationDirectory}.`
+                : `Search Console run started for ${project.name}. The finished workbook will be saved to ${download.destinationDirectory}.`;
+            monitorReportDownload(download.id, status, project.name);
             return { success: true };
         }
         throw new Error('Unknown reporting workflow.');
     } catch (error) {
+        if (downloadSessionId) await window.electronAPI.cancelReportDownloadOrganization(downloadSessionId);
         status.textContent = `Not run: ${error.message}`;
         return { success: false, message: error.message };
     } finally {
@@ -1045,6 +1059,25 @@ async function runReportingWorkflow(button, { fromRunAll = false, runAllConfigRo
             runButton.classList.remove('opacity-60', 'cursor-not-allowed');
         });
     }
+}
+
+async function monitorReportDownload(id, statusElement, projectName) {
+    if (!id) return;
+    const poll = async () => {
+        try {
+            const result = await window.electronAPI.getReportDownloadStatus(id);
+            if (result.status === 'saved') {
+                statusElement.textContent = `${projectName} workbook saved: ${result.savedPath}`;
+                return;
+            }
+            if (result.status === 'error' || result.status === 'not-found' || result.status === 'unknown') {
+                statusElement.textContent = `${projectName}: ${result.message}`;
+                return;
+            }
+        } catch { /* Keep waiting while Chrome finishes the workbook download. */ }
+        setTimeout(poll, 2500);
+    };
+    setTimeout(poll, 2500);
 }
 
 function showSectionView(type) {

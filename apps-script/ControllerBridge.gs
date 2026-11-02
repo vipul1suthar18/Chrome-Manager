@@ -24,6 +24,7 @@ function authorizeChromeManager(spreadsheetId) {
  */
 function doGet(e) {
   var request = chromeManagerRequestFromParams_(e && e.parameter || {});
+  if (!request.runId) request.runId = 'cm-' + Utilities.getUuid();
   var authorizedId = PropertiesService.getScriptProperties().getProperty(CHROME_MANAGER_SPREADSHEET_ID_KEY) || '';
   var pageMessage = '';
   var tabsToReplace = [];
@@ -84,6 +85,7 @@ function runSearchConsoleFromController(rawRequest) {
   try {
     var authorizedId = PropertiesService.getScriptProperties().getProperty(CHROME_MANAGER_SPREADSHEET_ID_KEY) || '';
     var request = chromeManagerRequestFromParams_(rawRequest || {});
+    if (!request.runId) request.runId = 'cm-' + Utilities.getUuid();
     if (!authorizedId || request.spreadsheetId !== authorizedId) {
       return { success: false, message: 'This script is not authorized for the requested spreadsheet. No changes were made.' };
     }
@@ -118,6 +120,7 @@ function runSearchConsoleFromController(rawRequest) {
         removeAllReportTabsExceptConfig_(ss);
         state = buildInitialJobState_(configs[0], ss);
         state.configRowNumber = configs[0].rowNumber || 2;
+        state.chromeManagerRunId = request.runId;
         state.batchQueue = configs.slice(1).map(serializeConfigForQueue_);
         state.batchStats = { total: configs.length, completed: 0, rowsWritten: 0, reports: [] };
       } else {
@@ -141,8 +144,10 @@ function runSearchConsoleFromController(rawRequest) {
         ]]);
 
         state = buildInitialJobState_(config, ss);
+        state.chromeManagerRunId = request.runId;
       }
 
+      setChromeManagerRunStatus_(request.runId, 'running', 'The report is running.');
       var result = runJobChunk_(state);
       if (result.done) {
         var batch = advanceBatchState_(result.state || state, result);
@@ -156,6 +161,7 @@ function runSearchConsoleFromController(rawRequest) {
           };
         }
         clearJobState_();
+        setChromeManagerRunStatus_(request.runId, 'completed', 'The report finished.');
         return {
           success: true,
           rowsWritten: batch.stats ? batch.stats.rowsWritten : result.totalRowsWritten,
@@ -175,6 +181,7 @@ function runSearchConsoleFromController(rawRequest) {
           : 'The export is continuing in the background. ' + result.totalRowsWritten + ' rows were written in the first run.'
       };
     } catch (runError) {
+      setChromeManagerRunStatus_(request.runId, 'failed', runError.message || String(runError));
       return {
         success: false,
         message: 'The workflow stopped after spreadsheet changes may have started. Check the spreadsheet before trying again. ' + (runError.message || runError)
@@ -187,7 +194,7 @@ function runSearchConsoleFromController(rawRequest) {
 
 function chromeManagerRequestFromParams_(params) {
   var request = {};
-  ['spreadsheetId', 'propertyUrl', 'startDate', 'endDate', 'dimension', 'searchType', 'country', 'outputMode', 'sheetName', 'runAllConfigRows'].forEach(function (key) {
+  ['spreadsheetId', 'propertyUrl', 'startDate', 'endDate', 'dimension', 'searchType', 'country', 'outputMode', 'sheetName', 'runAllConfigRows', 'runId', 'clientName', 'projectName'].forEach(function (key) {
     request[key] = (params[key] == null ? '' : String(params[key])).trim();
   });
   return request;
@@ -248,5 +255,5 @@ function chromeManagerConfirmationPage_(request, tabsToReplace, pageMessage, onl
     '<script>const request=' + requestJson + ';const tabs=' + tabsJson + ';const pageError=' + messageJson + ';const onlyConfigTab=' + onlyConfigJson + ';' +
     'const summary=document.getElementById("summary");if(request.runAllConfigRows==="true"){const p=document.createElement("p");p.textContent="Config rows to run: "+(request.configRowCount||0);summary.appendChild(p)}else{["propertyUrl","startDate","endDate","dimension","searchType","country","outputMode","sheetName"].forEach(k=>{const p=document.createElement("p");p.textContent=k+": "+(request[k]||"(blank)");summary.appendChild(p)})}' +
     'const cleanup=document.getElementById("cleanup");const h=document.createElement("strong");h.textContent=request.runAllConfigRows==="true"?"Tabs to delete before batch (Config is kept):":"Existing report tabs to replace:";cleanup.appendChild(h);if(onlyConfigTab){const p=document.createElement("p");p.textContent="Only the Config tab is present. No tabs need deletion.";cleanup.appendChild(p)}else if(!tabs.length){const p=document.createElement("p");p.textContent=request.runAllConfigRows==="true"?"No other tabs are present.":"No existing report tabs need replacement.";cleanup.appendChild(p)}else{const ul=document.createElement("ul");tabs.forEach(name=>{const li=document.createElement("li");li.textContent=name;ul.appendChild(li)});cleanup.appendChild(ul);if(request.runAllConfigRows==="true"){const warning=document.createElement("p");warning.className="warning";warning.textContent="These tabs will be permanently deleted before the Config rows run.";cleanup.appendChild(warning)}}' +
-    'const status=document.getElementById("status");document.getElementById("error").textContent=pageError;function startRun(){status.textContent="Running report…";google.script.run.withSuccessHandler(result=>{status.textContent=result.message||"Finished."}).withFailureHandler(error=>{status.textContent="Stopped: "+(error.message||error)}).runSearchConsoleFromController(request)}if(!pageError)startRun()</script></body></html>';
+    'const status=document.getElementById("status");document.getElementById("error").textContent=pageError;let downloaded=false;function downloadWorkbook(){if(downloaded)return;downloaded=true;status.textContent="Report complete. Downloading the workbook…";window.location.href="https://docs.google.com/spreadsheets/d/"+encodeURIComponent(request.spreadsheetId)+"/export?format=xlsx"}function pollRun(){google.script.run.withSuccessHandler(result=>{if(result.status==="completed"){status.textContent=result.message||"Report complete.";downloadWorkbook()}else if(result.status==="failed"){status.textContent="Stopped: "+(result.message||"The report failed.")}else{status.textContent=result.message||"Report is running…";setTimeout(pollRun,5000)}}).withFailureHandler(error=>{status.textContent="Checking status…";setTimeout(pollRun,10000)}).getChromeManagerRunStatus(request.runId)}function startRun(){status.textContent="Starting report…";google.script.run.withSuccessHandler(result=>{status.textContent=result.message||"Report started.";if(result.success)pollRun();else status.textContent="Stopped: "+(result.message||"The report did not start.")}).withFailureHandler(error=>{status.textContent="Stopped: "+(error.message||error)}).runSearchConsoleFromController(request)}if(!pageError)startRun()</script></body></html>';
 }

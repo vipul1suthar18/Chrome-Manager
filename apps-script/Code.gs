@@ -397,6 +397,7 @@ function advanceBatchState_(state, result) {
   var nextConfig = validateConfig(state.batchQueue.shift());
   var nextState = buildInitialJobState_(nextConfig, SpreadsheetApp.openById(state.spreadsheetId));
   nextState.configRowNumber = nextConfig.rowNumber || 2;
+  nextState.chromeManagerRunId = state.chromeManagerRunId || '';
   nextState.batchQueue = state.batchQueue;
   nextState.batchStats = stats;
   return { nextState: nextState, stats: stats };
@@ -422,6 +423,26 @@ function removeAllReportTabsExceptConfig_(ss) {
   });
   ss.setActiveSheet(configSheet);
   ss.moveActiveSheet(1);
+}
+
+/** Stores report status so the Chrome Manager tab can download on completion. */
+function setChromeManagerRunStatus_(runId, status, message) {
+  if (!runId) return;
+  var key = 'CHROME_MANAGER_RUN_' + String(runId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
+  PropertiesService.getDocumentProperties().setProperty(key, JSON.stringify({ status: status, message: message || '' }));
+}
+
+/** Read by the Chrome Manager page; terminal states are consumed once. */
+function getChromeManagerRunStatus(runId) {
+  var safeId = String(runId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
+  if (!safeId) return { status: 'missing', message: 'Run ID was not provided.' };
+  var properties = PropertiesService.getDocumentProperties();
+  var key = 'CHROME_MANAGER_RUN_' + safeId;
+  var raw = properties.getProperty(key);
+  if (!raw) return { status: 'running', message: 'The report is still running.' };
+  var result = JSON.parse(raw);
+  if (result.status === 'completed' || result.status === 'failed') properties.deleteProperty(key);
+  return result;
 }
 
 /**
@@ -518,7 +539,15 @@ function continueFetchAndWrite() {
   deleteTriggerById_(state.triggerId);
   state.triggerId = null;
 
-  var result = runJobChunk_(state);
+  var result;
+  try {
+    result = runJobChunk_(state);
+  } catch (error) {
+    clearJobState_();
+    setChromeManagerRunStatus_(state.chromeManagerRunId, 'failed', error.message || String(error));
+    console.error(error);
+    return;
+  }
 
   if (result.done) {
     var batch = advanceBatchState_(result.state || state, result);
@@ -526,6 +555,7 @@ function continueFetchAndWrite() {
       scheduleContinuation_(batch.nextState);
     } else {
       clearJobState_();
+      setChromeManagerRunStatus_(state.chromeManagerRunId, 'completed', 'All report rows finished.');
       sendCompletionEmail_(state, result, batch.stats);
     }
   } else {
