@@ -304,6 +304,7 @@
                     <h2 class="text-3xl font-bold theme-text">Clients</h2>
                     <div class="flex items-center gap-2">
                         <button id="search-console-btn" class="section-nav-button" type="button"><i class="fas fa-search text-sm"></i> Search Console</button>
+                        <button id="analytics-btn" class="section-nav-button" type="button"><i class="fas fa-chart-line text-sm"></i> Analytics</button>
                     </div>
                 </div>
                 <div class="flex items-center gap-1 p-1 rounded-xl border border-[var(--border-color)]" style="background: var(--surface);">
@@ -323,7 +324,8 @@
                         <p id="current-client-info" class="muted-text mt-1 text-sm">0 projects · Default</p>
                     </div>
                 </div>
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-3 flex-wrap">
+                    <button id="open-client-analytics-btn" class="hidden bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition-colors whitespace-nowrap" type="button"><i class="fas fa-chart-line mr-2"></i>Analytics sheet</button>
                     <div class="flex items-center rounded-xl px-4 py-2.5 text-sm w-64 border border-[var(--border-color)]" style="background: var(--input-bg); color: var(--text-secondary);">
                         <i class="fas fa-search mr-3"></i>
                         <input type="text" placeholder="Search projects..." class="bg-transparent outline-none w-full" style="color: var(--text-primary);" id="project-search-input">
@@ -370,6 +372,24 @@
                     <div id="search-console-empty" class="hidden p-10 text-center muted-text text-sm">Add a project to a client to configure Search Console reporting.</div>
                 </div>
                 <p class="muted-text text-xs mt-3">Each run uses the client’s Chrome profile and starts the connected Apps Script automatically. Download a spreadsheet copy manually before running if you want a backup.</p>
+            </div>
+            <div id="analytics-panel" class="hidden">
+                <div class="flex items-start justify-between gap-4 flex-wrap mb-4">
+                    <div>
+                        <h3 class="theme-text text-xl font-bold">Analytics sheets</h3>
+                        <p class="muted-text text-sm mt-1">One Analytics workbook per client group. Open each one in that group’s Chrome profile.</p>
+                    </div>
+                </div>
+                <p id="analytics-status" class="muted-text text-xs mb-3 min-h-4" role="status" aria-live="polite"></p>
+                <div class="surface-card rounded-2xl overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="reporting-table w-full">
+                            <thead><tr><th>Client group</th><th>Chrome profile</th><th>Project</th><th>Analytics sheet</th><th>Open</th></tr></thead>
+                            <tbody id="analytics-rows"></tbody>
+                        </table>
+                    </div>
+                    <div id="analytics-empty" class="hidden p-10 text-center muted-text text-sm">No Analytics sheets are connected yet. Add an Analytics resource to a project to show it here.</div>
+                </div>
             </div>
         </section>
     </main>

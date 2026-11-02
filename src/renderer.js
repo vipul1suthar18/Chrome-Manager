@@ -176,6 +176,10 @@ function renderProjects() {
 
     document.getElementById('current-client-name').textContent = client.name;
     document.getElementById('current-client-info').textContent = `${client.projects.length} ${client.projects.length === 1 ? 'project' : 'projects'} · ${client.chromeProfile?.name || 'Default'}`;
+    const analyticsButton = document.getElementById('open-client-analytics-btn');
+    const clientAnalytics = client.projects.flatMap(project => project.resources || [])
+        .find(resource => /^(analytics|ga4)$/i.test(resource.name || '') && resource.url);
+    analyticsButton.classList.toggle('hidden', !clientAnalytics);
 
     const query = document.getElementById('project-search-input').value.toLowerCase();
     const filteredProjects = client.projects.filter(p => p.name.toLowerCase().includes(query));
@@ -191,8 +195,9 @@ function renderProjects() {
         const card = document.createElement('div');
         card.className = 'project-card bg-glass border flex flex-col hover-glow';
 
+        const visibleResources = project.resources.filter(res => !/^(analytics|ga4)$/i.test(res.name || ''));
         let resourceGrid = '';
-        project.resources.forEach((res, index) => {
+        visibleResources.forEach((res, index) => {
             const faviconUrl = getFaviconUrl(res.url);
             resourceGrid += `
                 <button type="button" class="link-btn resource-tile resource-${(index % 4) + 1} p-3 text-left flex flex-col items-center justify-center gap-2" data-url="${escapeHtml(res.url || '')}" title="Open ${escapeHtml(res.name || 'resource')}">
@@ -207,7 +212,7 @@ function renderProjects() {
             <div class="flex justify-between items-start mb-6">
                 <div>
                     <h3 class="theme-text text-base font-bold truncate">${project.name}</h3>
-                    <p class="muted-text text-xs mt-1">${project.resources.length} quick actions</p>
+                    <p class="muted-text text-xs mt-1">${visibleResources.length} quick actions</p>
                 </div>
                 <div class="flex space-x-1">
                     <button type="button" class="edit-project icon-button !w-8 !h-8 !border-0 !bg-transparent" data-id="${project.id}" title="Edit project" aria-label="Edit ${project.name}"><i class="fas fa-pen text-xs"></i></button>
@@ -222,11 +227,8 @@ function renderProjects() {
             </button>
         `;
         // Launch individual resource URL
-        card.querySelectorAll('.link-btn').forEach((btn, index) => {
-            btn.addEventListener('click', () => {
-                const url = project.resources[index].url;
-                launchUrl(url);
-            });
+        card.querySelectorAll('.link-btn').forEach(btn => {
+            btn.addEventListener('click', () => launchUrl(btn.dataset.url));
         });
         card.querySelectorAll('.resource-favicon').forEach(image => {
             image.addEventListener('error', () => {
@@ -237,7 +239,7 @@ function renderProjects() {
 
         // Launch all project resources
         card.querySelector('.open-all-btn').addEventListener('click', () => {
-            project.resources.forEach(res => {
+            visibleResources.forEach(res => {
                 if (res.url) launchUrl(res.url);
             });
         });
@@ -365,6 +367,7 @@ function setupEventListeners() {
     document.getElementById('back-to-clients').addEventListener('click', showClientsView);
     document.getElementById('section-back-to-clients').addEventListener('click', showClientsView);
     document.getElementById('search-console-btn').addEventListener('click', () => showSectionView('searchConsole'));
+    document.getElementById('analytics-btn').addEventListener('click', () => showSectionView('analytics'));
     sectionView.addEventListener('change', (event) => {
         if (event.target.matches('[data-reporting-field]')) saveReportingSetting(event.target);
     });
@@ -373,6 +376,12 @@ function setupEventListeners() {
         if (event.target.matches('[data-search-console-master-field]')) event.target.setCustomValidity('');
     });
     sectionView.addEventListener('click', (event) => {
+
+        const analyticsButton = event.target.closest('.analytics-open-sheet');
+        if (analyticsButton) {
+            openAnalyticsSpreadsheet(analyticsButton);
+            return;
+        }
         const sheetButton = event.target.closest('.reporting-open-sheet');
         if (sheetButton) {
             openReportingSpreadsheet(sheetButton);
@@ -390,6 +399,12 @@ function setupEventListeners() {
     document.getElementById('search-console-apply-master').addEventListener('click', applySearchConsoleMasterSettings);
     document.getElementById('add-client-btn').addEventListener('click', () => openClientModal());
     document.getElementById('add-project-btn').addEventListener('click', () => openProjectModal());
+    document.getElementById('open-client-analytics-btn').addEventListener('click', () => {
+        const client = appData.clients.find(item => item.id === currentClientId);
+        const resource = client?.projects.flatMap(project => project.resources || [])
+            .find(item => /^(analytics|ga4)$/i.test(item.name || '') && item.url);
+        if (resource) launchUrl(resource.url);
+    });
     document.getElementById('add-resource-btn').addEventListener('click', () => {
         const resources = readProjectResources();
         resources.push({ name: '', url: '' });
@@ -683,6 +698,32 @@ function renderReportingSection(type) {
     tbody.closest('table').classList.toggle('hidden', rows.length === 0);
 }
 
+function renderAnalyticsSection() {
+    const tbody = document.getElementById('analytics-rows');
+    const emptyState = document.getElementById('analytics-empty');
+    const status = document.getElementById('analytics-status');
+    status.textContent = '';
+
+    const rows = appData.clients.flatMap(client => {
+        for (const project of client.projects || []) {
+            const resource = (project.resources || []).find(item => /^(analytics|ga4)$/i.test(item.name || '') && item.url);
+            if (resource) return [{ client, project }];
+        }
+        return [];
+    });
+
+    tbody.innerHTML = rows.map(({ client, project }) => `
+        <tr>
+            <td class="font-semibold theme-text">${escapeHtml(client.name)}</td>
+            <td>${escapeHtml(client.chromeProfile?.name || 'Default')}</td>
+            <td>${escapeHtml(project.name)}</td>
+            <td><span class="muted-text">Google Sheets workbook</span></td>
+            <td><button type="button" class="analytics-open-sheet bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg font-semibold text-xs transition-colors whitespace-nowrap" data-client-id="${escapeHtml(client.id)}" data-project-id="${escapeHtml(project.id)}"><i class="fas fa-arrow-up-right-from-square mr-1"></i>Open sheet</button></td>
+        </tr>
+    `).join('');
+    emptyState.classList.toggle('hidden', rows.length > 0);
+    tbody.closest('table').classList.toggle('hidden', rows.length === 0);
+}
 async function applySearchConsoleMasterSettings() {
     const startInput = document.getElementById('search-console-master-start-date');
     const endInput = document.getElementById('search-console-master-end-date');
@@ -765,6 +806,33 @@ async function openReportingSpreadsheet(button) {
     }
 }
 
+async function openAnalyticsSpreadsheet(button) {
+    const client = appData.clients.find(item => item.id === button.dataset.clientId);
+    const project = client?.projects.find(item => item.id === button.dataset.projectId);
+    const resource = project?.resources.find(item => /^(analytics|ga4)$/i.test(item.name || '') && item.url);
+    const status = document.getElementById('analytics-status');
+    if (!client || !project || !resource) {
+        status.textContent = 'This group does not have an Analytics sheet connected.';
+        return;
+    }
+
+    button.disabled = true;
+    button.classList.add('opacity-60', 'cursor-wait');
+    status.textContent = `Opening ${client.name} Analytics in the ${client.chromeProfile?.name || 'Default'} Chrome profile…`;
+    try {
+        const result = await window.electronAPI.launchUrlWithProfile({
+            url: resource.url,
+            profileDir: client.chromeProfile?.directory || 'Default'
+        });
+        if (!result?.success) throw new Error(result?.error || 'Unable to open the Analytics sheet.');
+        status.textContent = `Opened ${client.name} Analytics in its Chrome profile.`;
+    } catch (error) {
+        status.textContent = `Could not open ${client.name} Analytics: ${error.message}`;
+    } finally {
+        button.disabled = false;
+        button.classList.remove('opacity-60', 'cursor-wait');
+    }
+}
 async function saveReportingSetting(input) {
     const row = input.closest('tr');
     const type = input.closest('table').dataset.reportingType;
@@ -930,7 +998,11 @@ function showSectionView(type) {
     sectionView.classList.remove('hidden');
     sectionView.classList.add('animate-in', 'fade-in', 'slide-in-from-right-4', 'duration-200');
     document.getElementById('search-input').parentElement.classList.add('hidden');
-    renderReportingSection(type);
+    const analyticsView = type === 'analytics';
+    document.getElementById('search-console-panel').classList.toggle('hidden', analyticsView);
+    document.getElementById('analytics-panel').classList.toggle('hidden', !analyticsView);
+    if (analyticsView) renderAnalyticsSection();
+    else renderReportingSection('searchConsole');
 }
 
 function openClientWorkspace(id) {

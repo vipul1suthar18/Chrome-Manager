@@ -202,7 +202,7 @@ function chromeManagerConfirmationPage_(request, tabsToReplace, pageMessage, onl
   return '<!doctype html><html><head><base target="_top"><meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<style>body{font:15px Arial,sans-serif;color:#17243a;margin:32px auto;padding:0 20px;max-width:680px}h1{font-size:24px}.card{border:1px solid #dce5f1;border-radius:12px;padding:20px;margin:20px 0}li{margin:6px 0}.muted{color:#62718d}.warning{color:#9a4d00}.error{color:#a5222c}button{background:#2563eb;color:white;border:0;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:bold;cursor:pointer}button:disabled{opacity:.55;cursor:wait}a{color:#2563eb}</style></head><body>' +
     '<h1>Search Console report</h1><p class="muted">This run uses the Google account signed in to this client’s Chrome profile.</p>' +
-    '<div class="card"><div id="summary"></div><p class="warning"><strong>Before launching from Chrome Manager:</strong> download a copy of this spreadsheet yourself. This bridge does not make a backup. This page will run automatically when opened.</p><div id="cleanup"></div></div>' +
+    '<div class="card"><div id="summary"></div><div id="cleanup"></div></div>' +
     '<p id="error" class="error"></p><span id="status" class="muted"></span>' +
     '<script>const request=' + requestJson + ';const tabs=' + tabsJson + ';const pageError=' + messageJson + ';const onlyConfigTab=' + onlyConfigJson + ';' +
     'const summary=document.getElementById("summary");["propertyUrl","startDate","endDate","dimension","searchType","country","outputMode","sheetName"].forEach(k=>{const p=document.createElement("p");p.textContent=k+": "+(request[k]||"(blank)");summary.appendChild(p)});' +
