@@ -7,7 +7,6 @@
 
 var CHROME_MANAGER_SPREADSHEET_ID_KEY = 'CHROME_MANAGER_SPREADSHEET_ID';
 var CHROME_MANAGER_CONFIG_SHEET = 'Config';
-var CHROME_MANAGER_MONTH_TAB = /^(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(tember)?|oct(ober)?|nov(ember)?|dec(ember)?)(?:$|[\s_-]*20\d{2}(?:[\s_-].*)?$|[\s_-]+part\s*\d+[\s_-]*$)/i;
 
 /** Optional setup helper; pass an ID for standalone Apps Script projects. */
 function authorizeChromeManager(spreadsheetId) {
@@ -185,12 +184,14 @@ function chromeManagerEnsureConfigSheet_(ss) {
 }
 
 function chromeManagerTabsToReplace_(ss, config) {
+  // New Sheet must preserve existing tabs so separate monthly exports (for
+  // example Aug, Sep, and Oct) can coexist. Replace Existing only clears the
+  // explicitly named destination tab.
+  if (config.outputMode !== 'Replace Existing') return [];
+
   return ss.getSheets().filter(function (sheet) {
     var name = sheet.getName();
-    if (name === CHROME_MANAGER_CONFIG_SHEET) return false;
-    var isMonthlyReport = CHROME_MANAGER_MONTH_TAB.test(name);
-    var isExplicitReplaceTarget = config.outputMode === 'Replace Existing' && name === config.sheetName;
-    return isMonthlyReport || isExplicitReplaceTarget;
+    return name !== CHROME_MANAGER_CONFIG_SHEET && name === config.sheetName;
   });
 }
 

@@ -10,9 +10,9 @@ This is a small bridge for the client's Search Console Apps Script project. It c
 4. Copy the deployed URL ending in `/exec` into that client's **Apps Script URL** field in Chrome Manager. Use **Edit connection** to set the spreadsheet ID and script URL. The client Chrome profile must be signed in to an account that can access that spreadsheet and its Search Console property.
 5. You do not need to run `authorizeChromeManager()` manually. On the first Chrome Manager run, the bridge connects to the spreadsheet ID from that project's settings. Google may ask the client account to authorize spreadsheet access.
 
-Download a copy of the spreadsheet manually before starting a run if you want a backup. Chrome Manager does not make one. Clicking **Run** opens the bridge in that client's Chrome profile and the Apps Script run starts automatically under that client's Google account. The page lists monthly report tabs slated for replacement; it does not wait for another confirmation click.
+Download a copy of the spreadsheet manually before starting a run if you want a backup. Chrome Manager does not make one. Clicking **Run** opens the bridge in that client's Chrome profile and the Apps Script run starts automatically under that client's Google account. In `Replace Existing` mode, the page lists the named report tab slated for replacement; it does not wait for another confirmation click.
 
-The bridge preserves `Config`, replaces month-named report tabs (and the explicit target tab for `Replace Existing`), writes the table values to Config, then starts the existing chunked exporter. The Config tab is never selected for deletion.
+The bridge preserves all existing tabs when the output mode is `New Sheet`, so separate monthly exports can coexist. With `Replace Existing`, it replaces only the explicitly named target tab. The Config tab is never selected for deletion.
 
 The existing Apps Script `Replace Existing` mode clears its target sheet. Make any desired manual copy before clicking **Run**. Search Console cleanup only applies to Search Console; Analytics keeps its own separate no-deletion process.
 
