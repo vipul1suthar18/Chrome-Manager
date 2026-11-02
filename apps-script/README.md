@@ -12,7 +12,7 @@ This folder contains the Search Console Apps Script source files, including the 
 
 Download a copy of the spreadsheet manually before starting a run if you want a backup. Chrome Manager does not make one. Clicking **Run** opens the bridge in that client's Chrome profile and the Apps Script run starts automatically under that client's Google account. In `Replace Existing` mode, the page lists the named report tab slated for replacement; it does not wait for another confirmation click.
 
-The bridge preserves all existing tabs when the output mode is `New Sheet`, so separate monthly exports can coexist. With `Replace Existing`, it replaces only the explicitly named target tab. The Config tab is never selected for deletion. The direct spreadsheet menu also preserves existing tabs for `New Sheet`.
+The single-report bridge preserves all existing tabs when the output mode is `New Sheet`, so separate monthly exports can coexist. With `Replace Existing`, it replaces only the explicitly named target tab. The Config-row batch intentionally deletes every tab except `Config` before starting, both from Chrome Manager and from the spreadsheet menu. The direct menu asks for confirmation first; Chrome Manager lists the tabs that will be deleted on its run status page. Download a backup first if those tabs contain anything you need.
 
 The existing Apps Script `Replace Existing` mode clears its target sheet. Make any desired manual copy before clicking **Run**. Search Console cleanup only applies to Search Console; Analytics keeps its own separate no-deletion process.
 

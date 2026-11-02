@@ -64,6 +64,20 @@ function onFetchDataClick() {
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
+    var otherTabs = ss.getSheets().filter(function (sheet) {
+      return sheet.getName() !== CONFIG_SHEET_NAME;
+    });
+    if (otherTabs.length) {
+      var tabNames = otherTabs.map(function (sheet) { return '• ' + sheet.getName(); }).join('\n');
+      var choice = ui.alert(
+        'Clear tabs and run Config rows?',
+        'This batch will permanently delete every tab except Config before running the populated rows.\n\nTabs to delete:\n' + tabNames,
+        ui.ButtonSet.YES_NO
+      );
+      if (choice !== ui.Button.YES) return;
+    }
+    removeAllReportTabsExceptConfig_(ss);
+
     ss.toast('Fetching report 1 of ' + configs.length + '...', 'Search Console', -1);
     var state = buildInitialJobState_(configs[0], ss);
     state.configRowNumber = configs[0].rowNumber || 2;

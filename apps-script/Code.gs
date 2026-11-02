@@ -411,6 +411,19 @@ function formatBatchSummary_(stats) {
     reportLines.join('\n') + '\n\nTotal rows written: ' + stats.rowsWritten + '.';
 }
 
+/** Deletes every report tab before a Config-row batch, preserving Config. */
+function removeAllReportTabsExceptConfig_(ss) {
+  var configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
+  if (!configSheet) throw new Error('Cannot start the batch because the Config tab is missing.');
+
+  var configSheetId = configSheet.getSheetId();
+  ss.getSheets().forEach(function (sheet) {
+    if (sheet.getSheetId() !== configSheetId) ss.deleteSheet(sheet);
+  });
+  ss.setActiveSheet(configSheet);
+  ss.moveActiveSheet(1);
+}
+
 /**
  * Runs as much of an export job as fits within the time budget, fetching
  * one API page at a time and splitting across sheets as needed. Mutates
