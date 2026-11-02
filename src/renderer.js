@@ -180,6 +180,12 @@ function renderProjects() {
     const clientAnalytics = client.projects.flatMap(project => project.resources || [])
         .find(resource => /^(analytics|ga4)$/i.test(resource.name || '') && resource.url);
     analyticsButton.classList.toggle('hidden', !clientAnalytics);
+    const searchConsoleButton = document.getElementById('open-client-search-console-btn');
+    const searchConsoleReports = [...new Set(client.projects
+        .map(project => window.reportingWorkflows.searchConsole.getSpreadsheetId(project))
+        .filter(Boolean))];
+    searchConsoleButton.classList.toggle('hidden', searchConsoleReports.length === 0);
+    document.getElementById('client-search-console-status').classList.add('hidden');
 
     const query = document.getElementById('project-search-input').value.toLowerCase();
     const filteredProjects = client.projects.filter(p => p.name.toLowerCase().includes(query));
@@ -405,6 +411,7 @@ function setupEventListeners() {
             .find(item => /^(analytics|ga4)$/i.test(item.name || '') && item.url);
         if (resource) launchUrl(resource.url);
     });
+    document.getElementById('open-client-search-console-btn').addEventListener('click', openClientSearchConsoleReports);
     document.getElementById('add-resource-btn').addEventListener('click', () => {
         const resources = readProjectResources();
         resources.push({ name: '', url: '' });
@@ -833,6 +840,43 @@ async function openAnalyticsSpreadsheet(button) {
         button.classList.remove('opacity-60', 'cursor-wait');
     }
 }
+
+async function openClientSearchConsoleReports() {
+    const client = appData.clients.find(item => item.id === currentClientId);
+    const button = document.getElementById('open-client-search-console-btn');
+    const status = document.getElementById('client-search-console-status');
+    if (!client) return;
+
+    const spreadsheetIds = [...new Set(client.projects
+        .map(project => window.reportingWorkflows.searchConsole.getSpreadsheetId(project))
+        .filter(Boolean))];
+    if (!spreadsheetIds.length) return;
+
+    button.disabled = true;
+    button.classList.add('opacity-60', 'cursor-wait');
+    status.classList.remove('hidden');
+    status.textContent = `Opening ${spreadsheetIds.length} Search Console report${spreadsheetIds.length === 1 ? '' : 's'} in ${client.chromeProfile?.name || 'Default'}…`;
+
+    try {
+        const results = await Promise.all(spreadsheetIds.map(spreadsheetId =>
+            window.electronAPI.launchUrlWithProfile({
+                url: `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/edit`,
+                profileDir: client.chromeProfile?.directory || 'Default'
+            })
+        ));
+        const opened = results.filter(result => result?.success).length;
+        const failed = results.length - opened;
+        status.textContent = failed
+            ? `Opened ${opened} of ${results.length} Search Console reports. ${failed} could not be opened.`
+            : `Opened all ${opened} Search Console report${opened === 1 ? '' : 's'}.`;
+    } catch (error) {
+        status.textContent = `Could not open the Search Console reports: ${error.message}`;
+    } finally {
+        button.disabled = false;
+        button.classList.remove('opacity-60', 'cursor-wait');
+    }
+}
+
 async function saveReportingSetting(input) {
     const row = input.closest('tr');
     const type = input.closest('table').dataset.reportingType;
