@@ -6,6 +6,10 @@ let deleteTarget = null; // { type: 'client'|'project', id: string }
 let clientViewMode = 'grid';
 let isRunningSearchConsoleAll = false;
 let isDownloadingSearchConsoleAll = false;
+const datePickerMonths = new WeakMap();
+let appFindMatches = [];
+let appFindIndex = -1;
+let appFindReturnFocus = null;
 
 // UI Elements
 const clientGrid = document.getElementById('client-grid');
@@ -133,6 +137,64 @@ function readProjectResources() {
 }
 
 // Rendering
+function openAppFind() {
+    const panel = document.getElementById('app-find-panel');
+    const input = document.getElementById('app-find-input');
+    if (panel.hidden) appFindReturnFocus = document.activeElement;
+    panel.hidden = false;
+    input.focus();
+    input.select();
+    refreshAppFind();
+}
+
+function closeAppFind(restoreFocus = false) {
+    document.getElementById('app-find-panel').hidden = true;
+    appFindMatches.forEach(element => element.classList.remove('app-find-match', 'app-find-current'));
+    appFindMatches = [];
+    appFindIndex = -1;
+    document.getElementById('app-find-count').textContent = '0 of 0';
+    if (restoreFocus && appFindReturnFocus?.isConnected) appFindReturnFocus.focus();
+}
+
+function refreshAppFind() {
+    const query = document.getElementById('app-find-input').value.trim().toLocaleLowerCase();
+    appFindMatches.forEach(element => element.classList.remove('app-find-match', 'app-find-current'));
+    appFindMatches = [];
+    appFindIndex = -1;
+    if (query) {
+        const activeView = [clientsView, workspaceView, sectionView].find(view => !view.classList.contains('hidden'));
+        const candidates = activeView?.querySelectorAll('.client-card, .project-card, #search-console-rows tr[data-project-id], #analytics-rows tr') || [];
+        appFindMatches = [...candidates].filter(element => {
+            if (element.closest('[hidden]') || element.offsetParent === null) return false;
+            const fieldValues = [...element.querySelectorAll('input, select, textarea')].map(field => field.value || field.getAttribute('aria-label') || '').join(' ');
+            return `${element.textContent} ${fieldValues}`.toLocaleLowerCase().includes(query);
+        });
+        appFindMatches.forEach(element => element.classList.add('app-find-match'));
+        if (appFindMatches.length) {
+            appFindIndex = 0;
+            setAppFindCurrent();
+        }
+    }
+    updateAppFindCount();
+}
+
+function moveAppFind(direction) {
+    if (!appFindMatches.length) return;
+    appFindIndex = (appFindIndex + direction + appFindMatches.length) % appFindMatches.length;
+    setAppFindCurrent();
+    updateAppFindCount();
+}
+
+function setAppFindCurrent() {
+    appFindMatches.forEach((element, index) => element.classList.toggle('app-find-current', index === appFindIndex));
+    appFindMatches[appFindIndex]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function updateAppFindCount() {
+    const position = appFindIndex < 0 ? 0 : appFindIndex + 1;
+    document.getElementById('app-find-count').textContent = `${position} of ${appFindMatches.length}`;
+}
+
 function renderClients() {
     clientGrid.innerHTML = '';
     const query = document.getElementById('search-input').value.toLowerCase();
@@ -423,6 +485,52 @@ function setupEventListeners() {
         if (event.target.matches('[data-search-console-master-field]')) event.target.setCustomValidity('');
     });
     sectionView.addEventListener('click', (event) => {
+        const dateTrigger = event.target.closest('[data-date-picker-trigger]');
+        if (dateTrigger) {
+            const wrapper = dateTrigger.closest('[data-date-picker]');
+            const input = wrapper?.querySelector('[data-search-console-master-field]');
+            if (!wrapper || !input) return;
+            const popover = wrapper.querySelector('[data-calendar-popover]');
+            if (popover.hidden) openMasterDatePicker(input);
+            else closeMasterDatePicker(wrapper);
+            return;
+        }
+
+        const monthButton = event.target.closest('[data-calendar-month-offset]');
+        if (monthButton) {
+            const wrapper = monthButton.closest('[data-date-picker]');
+            const input = wrapper?.querySelector('[data-search-console-master-field]');
+            const visibleMonth = input && datePickerMonths.get(input);
+            if (input && visibleMonth) {
+                visibleMonth.setMonth(visibleMonth.getMonth() + Number(monthButton.dataset.calendarMonthOffset));
+                renderMasterDatePicker(input);
+            }
+            return;
+        }
+
+        const dateChoice = event.target.closest('[data-calendar-date]');
+        if (dateChoice) {
+            const wrapper = dateChoice.closest('[data-date-picker]');
+            const input = wrapper?.querySelector('[data-search-console-master-field]');
+            if (input) selectMasterDate(input, dateChoice.dataset.calendarDate);
+            return;
+        }
+
+        const dateAction = event.target.closest('[data-calendar-action]');
+        if (dateAction) {
+            const wrapper = dateAction.closest('[data-date-picker]');
+            const input = wrapper?.querySelector('[data-search-console-master-field]');
+            if (input) {
+                if (dateAction.dataset.calendarAction === 'today') selectMasterDate(input, formatDateAsIso(new Date()));
+                else {
+                    input.value = '';
+                    input.setCustomValidity('');
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    closeMasterDatePicker(wrapper);
+                }
+            }
+            return;
+        }
 
         const analyticsButton = event.target.closest('.analytics-open-sheet');
         if (analyticsButton) {
@@ -448,6 +556,30 @@ function setupEventListeners() {
         if (runButton) runReportingWorkflow(runButton);
         const downloadButton = event.target.closest('.reporting-download');
         if (downloadButton) downloadProjectWorkbook(downloadButton);
+    });
+    document.addEventListener('click', event => {
+        if (event.target.closest('[data-date-picker]')) return;
+        sectionView.querySelectorAll('[data-date-picker][data-open="true"]').forEach(closeMasterDatePicker);
+    });
+    document.addEventListener('keydown', event => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+            if (document.querySelector('.modal.active')) return;
+            event.preventDefault();
+            openAppFind();
+            return;
+        }
+        if (event.key === 'Escape' && !document.getElementById('app-find-panel').hidden) {
+            event.preventDefault();
+            closeAppFind(true);
+            return;
+        }
+        if (document.activeElement === document.getElementById('app-find-input') && event.key === 'Enter') {
+            event.preventDefault();
+            moveAppFind(event.shiftKey ? -1 : 1);
+            return;
+        }
+        if (event.key !== 'Escape') return;
+        sectionView.querySelectorAll('[data-date-picker][data-open="true"]').forEach(closeMasterDatePicker);
     });
     document.getElementById('search-console-run-all').addEventListener('click', () => runAllSearchConsole());
     document.getElementById('search-console-download-all').addEventListener('click', () => downloadAllSearchConsoleWorkbooks());
@@ -483,6 +615,10 @@ function setupEventListeners() {
     // Search Listeners
     document.getElementById('search-input').addEventListener('input', renderClients);
     document.getElementById('project-search-input').addEventListener('input', renderProjects);
+    document.getElementById('app-find-input').addEventListener('input', refreshAppFind);
+    document.getElementById('app-find-prev').addEventListener('click', () => moveAppFind(-1));
+    document.getElementById('app-find-next').addEventListener('click', () => moveAppFind(1));
+    document.getElementById('app-find-close').addEventListener('click', () => closeAppFind(true));
     document.addEventListener('keydown', (e) => {
         if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'k') return;
         if (document.querySelector('.modal.active')) return;
@@ -715,6 +851,87 @@ function formatReportingDateForInput(value) {
     return parseReportingDate(value) || '';
 }
 
+function formatReportingDateForDisplay(value) {
+    const normalized = parseReportingDate(value);
+    if (!normalized) return '';
+    const [year, month, day] = normalized.split('-');
+    return `${day}-${month}-${year}`;
+}
+
+function formatDateAsIso(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function openMasterDatePicker(input) {
+    const wrapper = input.closest('[data-date-picker]');
+    if (!wrapper) return;
+    const popover = wrapper.querySelector('[data-calendar-popover]');
+    const trigger = wrapper.querySelector('[data-date-picker-trigger]');
+    const selectedDate = parseReportingDate(input.value);
+    const selected = selectedDate ? new Date(`${selectedDate}T12:00:00`) : new Date();
+    datePickerMonths.set(input, new Date(selected.getFullYear(), selected.getMonth(), 1));
+    wrapper.dataset.open = 'true';
+    popover.hidden = false;
+    trigger?.setAttribute('aria-expanded', 'true');
+    renderMasterDatePicker(input);
+}
+
+function closeMasterDatePicker(wrapper) {
+    wrapper.dataset.open = 'false';
+    const popover = wrapper.querySelector('[data-calendar-popover]');
+    const trigger = wrapper.querySelector('[data-date-picker-trigger]');
+    if (popover) popover.hidden = true;
+    trigger?.setAttribute('aria-expanded', 'false');
+}
+
+function renderMasterDatePicker(input) {
+    const wrapper = input.closest('[data-date-picker]');
+    const popover = wrapper?.querySelector('[data-calendar-popover]');
+    const monthDate = datePickerMonths.get(input);
+    if (!popover || !monthDate) return;
+
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    const selected = parseReportingDate(input.value);
+    const today = formatDateAsIso(new Date());
+    const firstWeekday = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const weekdayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    const dayCells = weekdayLabels.map(day => `<span class="reporting-calendar-weekday" aria-hidden="true">${day}</span>`);
+    for (let blank = 0; blank < firstWeekday; blank += 1) dayCells.push('<span aria-hidden="true"></span>');
+    for (let day = 1; day <= daysInMonth; day += 1) {
+        const date = new Date(year, month, day);
+        const iso = formatDateAsIso(date);
+        const classes = ['reporting-calendar-day'];
+        if (iso === selected) classes.push('is-selected');
+        if (iso === today) classes.push('is-today');
+        dayCells.push(`<button type="button" class="${classes.join(' ')}" data-calendar-date="${iso}" aria-label="${date.toLocaleDateString(undefined, { dateStyle: 'full' })}"${iso === selected ? ' aria-pressed="true"' : ''}>${day}</button>`);
+    }
+
+    popover.innerHTML = `
+        <div class="reporting-calendar-header">
+            <span class="reporting-calendar-month">${monthDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
+            <div class="reporting-calendar-nav">
+                <button type="button" data-calendar-month-offset="-1" aria-label="Previous month" title="Previous month"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+                <button type="button" data-calendar-month-offset="1" aria-label="Next month" title="Next month"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+            </div>
+        </div>
+        <div class="reporting-calendar-grid" role="grid" aria-label="${monthDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}">${dayCells.join('')}</div>
+        <div class="reporting-calendar-footer">
+            <button type="button" data-calendar-action="clear">Clear</button>
+            <button type="button" data-calendar-action="today">Today</button>
+        </div>`;
+}
+
+function selectMasterDate(input, isoDate) {
+    const parsed = parseReportingDate(isoDate);
+    if (!parsed) return;
+    input.value = formatReportingDateForDisplay(parsed);
+    input.setCustomValidity('');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    closeMasterDatePicker(input.closest('[data-date-picker]'));
+}
+
 function reportingStatus(type) {
     return document.getElementById('search-console-status');
 }
@@ -723,8 +940,8 @@ function renderReportingSection(type) {
     document.getElementById('search-console-panel').classList.remove('hidden');
 
     const masterSettings = appData.reportingDefaults?.searchConsole || {};
-    document.getElementById('search-console-master-start-date').value = formatReportingDateForInput(masterSettings.startDate);
-    document.getElementById('search-console-master-end-date').value = formatReportingDateForInput(masterSettings.endDate);
+    document.getElementById('search-console-master-start-date').value = formatReportingDateForDisplay(masterSettings.startDate);
+    document.getElementById('search-console-master-end-date').value = formatReportingDateForDisplay(masterSettings.endDate);
     document.getElementById('search-console-master-sheet-name').value = masterSettings.sheetName || '';
 
     const rows = getReportingProjects();
@@ -819,8 +1036,8 @@ async function applySearchConsoleMasterSettings() {
     try {
         const result = await window.electronAPI.saveData(appData);
         if (!result?.success) throw new Error(result?.error || 'Unable to save the master settings.');
-        startInput.value = formatReportingDateForInput(startDate);
-        endInput.value = formatReportingDateForInput(endDate);
+        startInput.value = formatReportingDateForDisplay(startDate);
+        endInput.value = formatReportingDateForDisplay(endDate);
         renderReportingSection('searchConsole');
         status.textContent = `Applied dates and sheet name to all ${projects.length} projects.`;
     } catch (error) {

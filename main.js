@@ -78,14 +78,19 @@ async function readAppData() {
   const isEncrypted = fileContents.subarray(0, DATA_MAGIC.length).equals(DATA_MAGIC);
   let serialized;
   if (isEncrypted) {
-    try { serialized = await safeStorage.decryptStringAsync(fileContents.subarray(DATA_MAGIC.length)); }
+    try {
+      const decrypted = await safeStorage.decryptStringAsync(fileContents.subarray(DATA_MAGIC.length));
+      serialized = decrypted.result;
+    }
     catch { throw new Error('Saved data could not be unlocked. It has not been changed.'); }
   } else {
     serialized = fileContents.toString('utf8');
   }
   let data;
   try { data = JSON.parse(serialized); }
-  catch { throw new Error('Saved data is unreadable. It has not been changed.'); }
+  catch {
+    throw new Error('Saved data is unreadable. It has not been changed.');
+  }
   validateAppData(data);
   if (!isEncrypted) await writeEncryptedAppData(data);
   return data;
