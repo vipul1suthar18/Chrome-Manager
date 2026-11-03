@@ -688,7 +688,7 @@ function getReportingProjects() {
 function reportingInput(field, value, label, type = 'text') {
     const isDate = type === 'date';
     const displayValue = isDate ? formatReportingDateForInput(value) : value;
-    return `<input class="reporting-control" type="${isDate ? 'text' : type}"${isDate ? ' inputmode="text" autocomplete="off"' : ''} data-reporting-field="${field}" value="${escapeHtml(displayValue)}" aria-label="${escapeHtml(label)}" placeholder="${isDate ? 'DD-MM-YYYY' : 'Set value'}">`;
+    return `<input class="reporting-control" type="${type}" data-reporting-field="${field}" value="${escapeHtml(displayValue)}" aria-label="${escapeHtml(label)}"${isDate ? '' : ' placeholder="Set value"'}>`;
 }
 
 function parseReportingDate(value) {
@@ -712,10 +712,7 @@ function parseReportingDate(value) {
 }
 
 function formatReportingDateForInput(value) {
-    const normalized = parseReportingDate(value);
-    if (!normalized) return value || '';
-    const [year, month, day] = normalized.split('-');
-    return `${day}-${month}-${year}`;
+    return parseReportingDate(value) || '';
 }
 
 function reportingStatus(type) {
@@ -790,8 +787,8 @@ async function applySearchConsoleMasterSettings() {
     const endDate = parseReportingDate(endInput.value);
     const sheetName = sheetNameInput.value.trim();
 
-    startInput.setCustomValidity(startDate ? '' : 'Enter the start date as DD-MM-YYYY or YYYY-MM-DD.');
-    endInput.setCustomValidity(endDate ? '' : 'Enter the end date as DD-MM-YYYY or YYYY-MM-DD.');
+    startInput.setCustomValidity(startDate ? '' : 'Select a valid start date.');
+    endInput.setCustomValidity(endDate ? '' : 'Select a valid end date.');
     sheetNameInput.setCustomValidity(sheetName ? '' : 'Enter a sheet name.');
     if (!startDate) { startInput.reportValidity(); status.textContent = 'Enter a valid master start date.'; return; }
     if (!endDate) { endInput.reportValidity(); status.textContent = 'Enter a valid master end date.'; return; }
@@ -938,9 +935,9 @@ async function saveReportingSetting(input) {
     if (input.dataset.reportingField === 'startDate' || input.dataset.reportingField === 'endDate') {
         const normalizedDate = parseReportingDate(value);
         if (normalizedDate === null) {
-            input.setCustomValidity('Enter a date as DD-MM-YYYY or YYYY-MM-DD.');
+            input.setCustomValidity('Select a valid date.');
             input.reportValidity();
-            reportingStatus(type).textContent = 'Date not saved. Use DD-MM-YYYY or YYYY-MM-DD.';
+            reportingStatus(type).textContent = 'Date not saved. Select a valid date.';
             return;
         }
         input.setCustomValidity('');
